@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Quizzes and questions
+    match /quizzes/{quizId} {
+      allow read, write: if true;
+
+      match /questions/{questionId} {
+        allow read, write: if true;
+      }
+    }
+
+    // Quiz attempts and results
+    match /quizAttempts/{attemptId} {
+      allow read, write: if true;
+    }
+
+    // Multiplayer game sessions
+    match /gameResults/{gameId} {
+      allow read, write: if true;
+    }
+
+    // User accounts managed via backend RBAC
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Security audit logs
+    match /auditLogs/{logId} {
+      allow read, write: if true;
+    }
+
+    // Default deny for any other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

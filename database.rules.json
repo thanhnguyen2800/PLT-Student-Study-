@@ -1,0 +1,22 @@
+{
+  "rules": {
+    "games": {
+      "$gameId": {
+        ".read": "auth != null",
+        ".write": "auth != null && (data.child('hostId').val() == auth.uid || !data.exists() || root.child('users').child(auth.uid).child('role').val() == 'ADMIN' || root.child('users').child(auth.uid).child('role').val() == 'SUPER_ADMIN')",
+        "players": {
+          "$playerId": {
+            ".write": "auth != null && (auth.uid == $playerId || data.parent().parent().child('hostId').val() == auth.uid)"
+          }
+        },
+        "answers": {
+          "$qIndex": {
+            "$playerId": {
+              ".write": "auth != null && auth.uid == $playerId"
+            }
+          }
+        }
+      }
+    }
+  }
+}

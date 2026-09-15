@@ -1,0 +1,6 @@
+{
+  "name": "STUDENT STUDY",
+  "description": "Nền tảng học tập trực tuyến kết hợp Quiz, Flashcard, Realtime Multiplayer và Mini Games",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

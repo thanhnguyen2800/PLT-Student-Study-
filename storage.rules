@@ -1,0 +1,45 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isImage() {
+      return request.resource.contentType.matches('image/.*') && request.resource.size < 10 * 1024 * 1024;
+    }
+    
+    function isAudio() {
+      return request.resource.contentType.matches('audio/.*') && request.resource.size < 15 * 1024 * 1024;
+    }
+
+    // Avatars
+    match /avatars/{userId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && isImage();
+    }
+
+    // Quiz Covers & Assets
+    match /quiz-assets/{quizId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isImage() || isAudio());
+    }
+
+    // Question Assets (images, audio)
+    match /question-assets/{quizId}/{questionId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isImage() || isAudio());
+    }
+
+    // Learning Documents
+    match /documents/{userId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && request.resource.size < 25 * 1024 * 1024;
+    }
+  }
+}

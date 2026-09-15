@@ -1,0 +1,295 @@
+import fs from 'fs';
+import path from 'path';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import {
+  getFirestore,
+  Firestore,
+  collection,
+  getDocs,
+  doc,
+  setDoc,
+  getDoc,
+  deleteDoc,
+  query,
+  orderBy,
+  limit,
+} from 'firebase/firestore';
+import { Quiz, UserProfile, QuizAttempt, AuditLog } from '../../types';
+
+interface FirebaseConfig {
+  projectId: string;
+  appId: string;
+  apiKey: string;
+  authDomain?: string;
+  firestoreDatabaseId?: string;
+  storageBucket?: string;
+}
+
+let firestoreInstance: Firestore | null = null;
+let firebaseAppInstance: FirebaseApp | null = null;
+let isConfigured = false;
+
+// Initialize Firebase client on server-side
+export function getBackendFirestore(): Firestore | null {
+  if (firestoreInstance) {
+    return firestoreInstance;
+  }
+
+  try {
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (!fs.existsSync(configPath)) {
+      console.warn('[Firebase Server] firebase-applet-config.json not found');
+      return null;
+    }
+
+    const raw = fs.readFileSync(configPath, 'utf8');
+    const config: FirebaseConfig = JSON.parse(raw);
+
+    if (!config.projectId || !config.apiKey) {
+      console.warn('[Firebase Server] Missing projectId or apiKey in firebase-applet-config.json');
+      return null;
+    }
+
+    const appName = 'STUDENT_STUDY_BACKEND';
+    const existingApps = getApps();
+    const app = existingApps.find(a => a.name === appName) || initializeApp({
+      projectId: config.projectId,
+      apiKey: config.apiKey,
+      appId: config.appId,
+      authDomain: config.authDomain,
+      storageBucket: config.storageBucket,
+    }, appName);
+
+    firebaseAppInstance = app;
+
+    if (config.firestoreDatabaseId) {
+      firestoreInstance = getFirestore(app, config.firestoreDatabaseId);
+    } else {
+      firestoreInstance = getFirestore(app);
+    }
+
+    isConfigured = true;
+    console.log(`[Firebase Server] Successfully connected to Firestore (Project: ${config.projectId}, DB: ${config.firestoreDatabaseId || '(default)'})`);
+    return firestoreInstance;
+  } catch (error) {
+    console.error('[Firebase Server] Error initializing Firestore:', error);
+    return null;
+  }
+}
+
+export function isFirestoreReady(): boolean {
+  return isConfigured && firestoreInstance !== null;
+}
+
+// Clean object for Firestore (removes undefined fields which Firestore rejects)
+function sanitizeForFirestore<T extends Record<string, any>>(obj: T): any {
+  const result: any = {};
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (val === undefined) {
+      continue;
+    }
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      result[key] = sanitizeForFirestore(val);
+    } else if (Array.isArray(val)) {
+      result[key] = val.map(item => (item !== null && typeof item === 'object' ? sanitizeForFirestore(item) : item));
+    } else {
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
+// =============================================================================
+// QUIZ OPERATIONS (FIRESTORE)
+// =============================================================================
+
+export async function saveQuizToFirestore(quiz: Quiz): Promise<boolean> {
+  const db = getBackendFirestore();
+  if (!db || !quiz.id) return false;
+
+  try {
+    const quizRef = doc(db, 'quizzes', quiz.id);
+    const sanitized = sanitizeForFirestore(quiz);
+    await setDoc(quizRef, {
+      ...sanitized,
+      syncedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    console.error(`[Firebase Server] Error saving quiz ${quiz.id} to Firestore:`, err);
+    return false;
+  }
+}
+
+export async function deleteQuizFromFirestore(quizId: string): Promise<boolean> {
+  const db = getBackendFirestore();
+  if (!db || !quizId) return false;
+
+  try {
+    const quizRef = doc(db, 'quizzes', quizId);
+    await deleteDoc(quizRef);
+    return true;
+  } catch (err) {
+    console.error(`[Firebase Server] Error deleting quiz ${quizId} from Firestore:`, err);
+    return false;
+  }
+}
+
+export async function loadAllQuizzesFromFirestore(): Promise<Quiz[]> {
+  const db = getBackendFirestore();
+  if (!db) return [];
+
+  try {
+    const colRef = collection(db, 'quizzes');
+    const snap = await getDocs(colRef);
+    const quizzes: Quiz[] = [];
+    snap.forEach(docSnap => {
+      const data = docSnap.data() as Quiz;
+      if (data && data.id) {
+        quizzes.push(data);
+      }
+    });
+    return quizzes;
+  } catch (err) {
+    console.error('[Firebase Server] Error loading quizzes from Firestore:', err);
+    return [];
+  }
+}
+
+// =============================================================================
+// USER OPERATIONS (FIRESTORE)
+// =============================================================================
+
+export async function saveUserToFirestore(user: UserProfile): Promise<boolean> {
+  const db = getBackendFirestore();
+  if (!db || !user.uid) return false;
+
+  try {
+    const userRef = doc(db, 'users', user.uid);
+    const sanitized = sanitizeForFirestore(user);
+    await setDoc(userRef, {
+      ...sanitized,
+      syncedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    console.error(`[Firebase Server] Error saving user ${user.uid} to Firestore:`, err);
+    return false;
+  }
+}
+
+export async function deleteUserFromFirestore(uid: string): Promise<boolean> {
+  const db = getBackendFirestore();
+  if (!db || !uid) return false;
+
+  try {
+    const userRef = doc(db, 'users', uid);
+    await deleteDoc(userRef);
+    return true;
+  } catch (err) {
+    console.error(`[Firebase Server] Error deleting user ${uid} from Firestore:`, err);
+    return false;
+  }
+}
+
+export async function loadAllUsersFromFirestore(): Promise<UserProfile[]> {
+  const db = getBackendFirestore();
+  if (!db) return [];
+
+  try {
+    const colRef = collection(db, 'users');
+    const snap = await getDocs(colRef);
+    const users: UserProfile[] = [];
+    snap.forEach(docSnap => {
+      const data = docSnap.data() as UserProfile;
+      if (data && data.uid) {
+        users.push(data);
+      }
+    });
+    return users;
+  } catch (err) {
+    console.error('[Firebase Server] Error loading users from Firestore:', err);
+    return [];
+  }
+}
+
+// =============================================================================
+// ATTEMPT OPERATIONS (FIRESTORE)
+// =============================================================================
+
+export async function saveAttemptToFirestore(attempt: QuizAttempt): Promise<boolean> {
+  const db = getBackendFirestore();
+  if (!db || !attempt.id) return false;
+
+  try {
+    const attemptRef = doc(db, 'quizAttempts', attempt.id);
+    const sanitized = sanitizeForFirestore(attempt);
+    await setDoc(attemptRef, sanitized, { merge: true });
+    return true;
+  } catch (err) {
+    console.error(`[Firebase Server] Error saving attempt ${attempt.id} to Firestore:`, err);
+    return false;
+  }
+}
+
+export async function loadAllAttemptsFromFirestore(): Promise<QuizAttempt[]> {
+  const db = getBackendFirestore();
+  if (!db) return [];
+
+  try {
+    const colRef = collection(db, 'quizAttempts');
+    const snap = await getDocs(colRef);
+    const list: QuizAttempt[] = [];
+    snap.forEach(docSnap => {
+      const data = docSnap.data() as QuizAttempt;
+      if (data && data.id) {
+        list.push(data);
+      }
+    });
+    return list;
+  } catch (err) {
+    console.error('[Firebase Server] Error loading attempts from Firestore:', err);
+    return [];
+  }
+}
+
+// =============================================================================
+// AUDIT LOG OPERATIONS (FIRESTORE)
+// =============================================================================
+
+export async function saveAuditLogToFirestore(log: AuditLog): Promise<boolean> {
+  const db = getBackendFirestore();
+  if (!db || !log.id) return false;
+
+  try {
+    const logRef = doc(db, 'auditLogs', log.id);
+    const sanitized = sanitizeForFirestore(log);
+    await setDoc(logRef, sanitized, { merge: true });
+    return true;
+  } catch (err) {
+    console.error(`[Firebase Server] Error saving audit log ${log.id} to Firestore:`, err);
+    return false;
+  }
+}
+
+export async function loadAllAuditLogsFromFirestore(): Promise<AuditLog[]> {
+  const db = getBackendFirestore();
+  if (!db) return [];
+
+  try {
+    const colRef = collection(db, 'auditLogs');
+    const snap = await getDocs(colRef);
+    const list: AuditLog[] = [];
+    snap.forEach(docSnap => {
+      const data = docSnap.data() as AuditLog;
+      if (data && data.id) {
+        list.push(data);
+      }
+    });
+    return list;
+  } catch (err) {
+    console.error('[Firebase Server] Error loading audit logs from Firestore:', err);
+    return [];
+  }
+}
