@@ -10,8 +10,11 @@ import {
   BrainCircuit, 
   Zap, 
   GraduationCap, 
-  HelpCircle 
+  HelpCircle,
+  Lock,
+  LogIn
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 interface ChatMessage {
   id: string;
@@ -21,7 +24,12 @@ interface ChatMessage {
   modelUsed?: string;
 }
 
-export const GeminiChatbot: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+export const GeminiChatbot: React.FC<{ 
+  isOpen: boolean; 
+  onClose: () => void;
+  onRequireLogin?: () => void;
+}> = ({ isOpen, onClose, onRequireLogin }) => {
+  const { currentUser } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'msg-welcome',
@@ -48,6 +56,10 @@ export const GeminiChatbot: React.FC<{ isOpen: boolean; onClose: () => void }> =
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!input.trim() || isLoading) return;
+    if (!currentUser) {
+      if (onRequireLogin) onRequireLogin();
+      return;
+    }
 
     const userText = input.trim();
     const userMsg: ChatMessage = {
@@ -70,6 +82,7 @@ export const GeminiChatbot: React.FC<{ isOpen: boolean; onClose: () => void }> =
           messages: newHistory.map(m => ({ role: m.role, content: m.content })),
           roleType,
           model: selectedModel,
+          userId: currentUser.uid,
         }),
       });
 
@@ -140,13 +153,15 @@ export const GeminiChatbot: React.FC<{ isOpen: boolean; onClose: () => void }> =
         </div>
 
         <div className="flex items-center gap-1">
-          <button
-            onClick={clearChat}
-            title="Làm mới hội thoại"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          {currentUser && (
+            <button
+              onClick={clearChat}
+              title="Làm mới hội thoại"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             title={isExpanded ? "Thu nhỏ" : "Mở rộng"}
@@ -164,121 +179,150 @@ export const GeminiChatbot: React.FC<{ isOpen: boolean; onClose: () => void }> =
         </div>
       </div>
 
-      {/* Role & Model Controls */}
-      <div className="px-4 py-2 bg-slate-50/50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-2 text-xs">
-        <div className="flex items-center gap-1 bg-white dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
-          <GraduationCap className="w-3.5 h-3.5 text-indigo-500" />
-          <select 
-            value={roleType} 
-            onChange={e => setRoleType(e.target.value as any)}
-            className="bg-transparent text-slate-700 dark:text-slate-200 outline-none font-medium text-xs cursor-pointer"
+      {!currentUser ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50/50 dark:bg-slate-900/50">
+          <div className="w-16 h-16 rounded-3xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-4 shadow-inner">
+            <Lock className="w-8 h-8" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900 dark:text-white mb-2">
+            Yêu Cầu Đăng Nhập Hệ Thống
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed mb-6">
+            Tính năng Trợ Giảng AI thông minh chỉ khả dụng cho tài khoản học viên và giảng viên đã đăng nhập hệ thống.
+          </p>
+          <button
+            onClick={() => {
+              if (onRequireLogin) {
+                onRequireLogin();
+              } else {
+                onClose();
+              }
+            }}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors shadow-md shadow-indigo-600/20"
           >
-            <option value="GENERAL">Trợ giảng toàn năng</option>
-            <option value="SOCRATIC_TUTOR">Phương pháp Socratic (Gợi mở)</option>
-            <option value="QUIZ_MASTER">Quiz Master (Hỏi đáp nhanh)</option>
-            <option value="STEM_COACH">STEM & Lập trình</option>
-          </select>
+            <LogIn className="w-4 h-4" />
+            <span>Đăng nhập ngay</span>
+          </button>
         </div>
-
-        <div className="flex items-center gap-1 bg-white dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 ml-auto">
-          {selectedModel === 'gemini-3.1-pro-preview' ? (
-            <BrainCircuit className="w-3.5 h-3.5 text-purple-500" />
-          ) : selectedModel === 'gemini-3.1-flash-lite' ? (
-            <Zap className="w-3.5 h-3.5 text-amber-500" />
-          ) : (
-            <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-          )}
-          <select
-            value={selectedModel}
-            onChange={e => setSelectedModel(e.target.value as any)}
-            className="bg-transparent text-slate-700 dark:text-slate-200 outline-none font-medium text-xs cursor-pointer"
-          >
-            <option value="gemini-3.5-flash">gemini-3.5-flash (Chuẩn)</option>
-            <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview (Suy luận sâu)</option>
-            <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Phản hồi siêu tốc)</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Message History Thread */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}
-          >
-            <div
-              className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
-                m.role === 'user'
-                  ? 'bg-indigo-600 text-white rounded-br-none'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-bl-none border border-slate-200/50 dark:border-slate-700/50'
-              }`}
-            >
-              <div className="whitespace-pre-wrap leading-relaxed">{m.content}</div>
+      ) : (
+        <>
+          {/* Role & Model Controls */}
+          <div className="px-4 py-2 bg-slate-50/50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-2 text-xs">
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+              <GraduationCap className="w-3.5 h-3.5 text-indigo-500" />
+              <select 
+                value={roleType} 
+                onChange={e => setRoleType(e.target.value as any)}
+                className="bg-transparent text-slate-700 dark:text-slate-200 outline-none font-medium text-xs cursor-pointer"
+              >
+                <option value="GENERAL">Trợ giảng toàn năng</option>
+                <option value="SOCRATIC_TUTOR">Phương pháp Socratic (Gợi mở)</option>
+                <option value="QUIZ_MASTER">Quiz Master (Hỏi đáp nhanh)</option>
+                <option value="STEM_COACH">STEM & Lập trình</option>
+              </select>
             </div>
-            <div className="flex items-center gap-1.5 mt-1 px-1">
-              <span className="text-[10px] text-slate-400">{m.timestamp}</span>
-              {m.modelUsed && (
-                <span className="text-[9px] px-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300">
-                  {m.modelUsed}
-                </span>
+
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 ml-auto">
+              {selectedModel === 'gemini-3.1-pro-preview' ? (
+                <BrainCircuit className="w-3.5 h-3.5 text-purple-500" />
+              ) : selectedModel === 'gemini-3.1-flash-lite' ? (
+                <Zap className="w-3.5 h-3.5 text-amber-500" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5 text-blue-500" />
               )}
+              <select
+                value={selectedModel}
+                onChange={e => setSelectedModel(e.target.value as any)}
+                className="bg-transparent text-slate-700 dark:text-slate-200 outline-none font-medium text-xs cursor-pointer"
+              >
+                <option value="gemini-3.5-flash">gemini-3.5-flash (Chuẩn)</option>
+                <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview (Suy luận sâu)</option>
+                <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Phản hồi siêu tốc)</option>
+              </select>
             </div>
           </div>
-        ))}
-        {isLoading && (
-          <div className="flex items-center gap-2 text-slate-400 text-xs py-2 px-1">
-            <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
-            <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse delay-75"></div>
-            <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse delay-150"></div>
-            <span>AI đang soạn thảo câu trả lời...</span>
+
+          {/* Message History Thread */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.map((m) => (
+              <div
+                key={m.id}
+                className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}
+              >
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
+                    m.role === 'user'
+                      ? 'bg-indigo-600 text-white rounded-br-none'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-bl-none border border-slate-200/50 dark:border-slate-700/50'
+                  }`}
+                >
+                  <div className="whitespace-pre-wrap leading-relaxed">{m.content}</div>
+                </div>
+                <div className="flex items-center gap-1.5 mt-1 px-1">
+                  <span className="text-[10px] text-slate-400">{m.timestamp}</span>
+                  {m.modelUsed && (
+                    <span className="text-[9px] px-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300">
+                      {m.modelUsed}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {isLoading && (
+              <div className="flex items-center gap-2 text-slate-400 text-xs py-2 px-1">
+                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
+                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse delay-75"></div>
+                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse delay-150"></div>
+                <span>AI đang soạn thảo câu trả lời...</span>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
           </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
 
-      {/* Quick Prompts */}
-      <div className="px-4 py-2 flex gap-1.5 overflow-x-auto text-xs border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 scrollbar-none">
-        <button
-          type="button"
-          onClick={() => setInput('Giải thích cho tôi về React Server Components và Client Components')}
-          className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 text-[11px]"
-        >
-          💡 RSC vs Client Components
-        </button>
-        <button
-          type="button"
-          onClick={() => setInput('Tạo giúp tôi 3 câu hỏi trắc nghiệm ôn tập về TypeScript')}
-          className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 text-[11px]"
-        >
-          📝 Tạo 3 câu hỏi Quiz
-        </button>
-        <button
-          type="button"
-          onClick={() => setInput('Quy tắc bảo mật Firebase Security Rules tốt nhất là gì?')}
-          className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 text-[11px]"
-        >
-          🛡️ Firebase Security Rules
-        </button>
-      </div>
+          {/* Quick Prompts */}
+          <div className="px-4 py-2 flex gap-1.5 overflow-x-auto text-xs border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 scrollbar-none">
+            <button
+              type="button"
+              onClick={() => setInput('Giải thích cho tôi về React Server Components và Client Components')}
+              className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 text-[11px]"
+            >
+              💡 RSC vs Client Components
+            </button>
+            <button
+              type="button"
+              onClick={() => setInput('Tạo giúp tôi 3 câu hỏi trắc nghiệm ôn tập về TypeScript')}
+              className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 text-[11px]"
+            >
+              📝 Tạo 3 câu hỏi Quiz
+            </button>
+            <button
+              type="button"
+              onClick={() => setInput('Quy tắc bảo mật Firebase Security Rules tốt nhất là gì?')}
+              className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 text-[11px]"
+            >
+              🛡️ Firebase Security Rules
+            </button>
+          </div>
 
-      {/* Input Field */}
-      <form onSubmit={handleSend} className="p-3 border-t border-slate-100 dark:border-slate-800 flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          placeholder="Hỏi bất kỳ điều gì về bài học..."
-          className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-4 py-2.5 rounded-xl text-sm border-none focus:ring-2 focus:ring-indigo-500 outline-none"
-        />
-        <button
-          type="submit"
-          disabled={!input.trim() || isLoading}
-          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium flex items-center justify-center transition-colors"
-        >
-          <Send className="w-4 h-4" />
-        </button>
-      </form>
+          {/* Input Field */}
+          <form onSubmit={handleSend} className="p-3 border-t border-slate-100 dark:border-slate-800 flex gap-2">
+            <input
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              placeholder="Hỏi bất kỳ điều gì về bài học..."
+              className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-4 py-2.5 rounded-xl text-sm border-none focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!input.trim() || isLoading}
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium flex items-center justify-center transition-colors"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </form>
+        </>
+      )}
     </div>
   );
 };

@@ -4,8 +4,8 @@ import { useAuth } from '../context/AuthContext';
 
 export const LoginPage: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
   const { login } = useAuth();
-  const [email, setEmail] = useState('admin@studentstudy.edu');
-  const [password, setPassword] = useState('Admin@123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -26,12 +26,6 @@ export const LoginPage: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleQuickFill = (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setErrorMessage(null);
   };
 
   return (
@@ -126,36 +120,6 @@ export const LoginPage: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
             )}
           </button>
         </form>
-
-        {/* Quick Demo Access Helpers */}
-        <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-          <p className="text-[11px] font-semibold text-slate-400 text-center uppercase tracking-wider mb-2">
-            Tài khoản mẫu thử nghiệm (Quick Access):
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickFill('admin@studentstudy.edu', 'Admin@123')}
-              className="py-1.5 px-2 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 text-[11px] font-semibold hover:opacity-80 transition-opacity"
-            >
-              Super Admin
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickFill('teacher@studentstudy.edu', 'Admin@123')}
-              className="py-1.5 px-2 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px] font-semibold hover:opacity-80 transition-opacity"
-            >
-              Teacher
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickFill('student01@studentstudy.edu', 'Admin@123')}
-              className="py-1.5 px-2 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[11px] font-semibold hover:opacity-80 transition-opacity"
-            >
-              Player
-            </button>
-          </div>
-        </div>
 
       </div>
 

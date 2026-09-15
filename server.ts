@@ -575,7 +575,24 @@ app.get('/api/games/history', (req, res) => {
 // 1. Multi-turn Chatbot with Role Selection and History
 app.post('/api/ai/chat', async (req, res) => {
   try {
-    const { messages, roleType, model: requestedModel } = req.body;
+    const { messages, roleType, model: requestedModel, userId } = req.body;
+    
+    // Yêu cầu bắt buộc đăng nhập để sử dụng AI Chatbot
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'Yêu cầu đăng nhập tài khoản hệ thống để sử dụng AI Trợ giảng.' },
+      });
+    }
+
+    const user = dataStore.getUserById(userId);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'Tài khoản không hợp lệ hoặc đã bị vô hiệu hóa.' },
+      });
+    }
+
     const ai = getGenAI();
 
     // Select recommended model based on task requirements:

@@ -27,7 +27,7 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openAIChat }) => {
-  const { currentUser, logout, quickSwitchUser, canAccess } = useAuth();
+  const { currentUser, logout, canAccess } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -89,7 +89,13 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openA
           
           {/* AI Tutor Chat Button */}
           <button
-            onClick={openAIChat}
+            onClick={() => {
+              if (!currentUser) {
+                setCurrentTab('login');
+              } else {
+                openAIChat();
+              }
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/50 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-semibold transition-colors shadow-xs"
           >
             <Sparkles className="w-3.5 h-3.5 text-purple-600 animate-pulse" />
@@ -139,51 +145,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openA
                     <div className="mt-2 flex items-center justify-between">
                       <RoleBadge role={currentUser.role} />
                       <span className="text-[10px] text-slate-400">{currentUser.department || 'STUDENT STUDY'}</span>
-                    </div>
-                  </div>
-
-                  {/* Role Switcher for instant test verification */}
-                  <div className="p-2 border-b border-slate-100 dark:border-slate-800">
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                      Chuyển quyền thử nghiệm (RBAC):
-                    </p>
-                    <div className="grid grid-cols-1 gap-1">
-                      <button
-                        onClick={() => {
-                          quickSwitchUser('admin@studentstudy.edu');
-                          setShowUserMenu(false);
-                        }}
-                        className={`text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between ${
-                          currentUser.role === 'SUPER_ADMIN' ? 'bg-indigo-50 dark:bg-indigo-950/60 font-bold text-indigo-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span>👑 Super Admin</span>
-                        {currentUser.role === 'SUPER_ADMIN' && <span className="text-[10px]">Đang chọn</span>}
-                      </button>
-                      <button
-                        onClick={() => {
-                          quickSwitchUser('teacher@studentstudy.edu');
-                          setShowUserMenu(false);
-                        }}
-                        className={`text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between ${
-                          currentUser.role === 'TEACHER' ? 'bg-blue-50 dark:bg-blue-950/60 font-bold text-blue-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span>🎓 Teacher (Giảng viên)</span>
-                        {currentUser.role === 'TEACHER' && <span className="text-[10px]">Đang chọn</span>}
-                      </button>
-                      <button
-                        onClick={() => {
-                          quickSwitchUser('student01@studentstudy.edu');
-                          setShowUserMenu(false);
-                        }}
-                        className={`text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between ${
-                          currentUser.role === 'PLAYER' ? 'bg-emerald-50 dark:bg-emerald-950/60 font-bold text-emerald-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <span>🎒 Player (Học viên)</span>
-                        {currentUser.role === 'PLAYER' && <span className="text-[10px]">Đang chọn</span>}
-                      </button>
                     </div>
                   </div>
 

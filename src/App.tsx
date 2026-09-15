@@ -39,7 +39,13 @@ function MainApp() {
       <Navbar
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}
-        openAIChat={() => setIsAIChatOpen(true)}
+        openAIChat={() => {
+          if (!currentUser) {
+            setCurrentTab('login');
+          } else {
+            setIsAIChatOpen(true);
+          }
+        }}
       />
 
       {/* Main Page Content */}
@@ -51,7 +57,13 @@ function MainApp() {
         {currentTab === 'dashboard' && (
           <DashboardPage
             onNavigate={handleNavigate}
-            openAIChat={() => setIsAIChatOpen(true)}
+            openAIChat={() => {
+              if (!currentUser) {
+                setCurrentTab('login');
+              } else {
+                setIsAIChatOpen(true);
+              }
+            }}
           />
         )}
 
@@ -114,7 +126,13 @@ function MainApp() {
       {/* Floating Gemini AI Tutor Widget Toggle */}
       {!isAIChatOpen && (
         <button
-          onClick={() => setIsAIChatOpen(true)}
+          onClick={() => {
+            if (!currentUser) {
+              setCurrentTab('login');
+            } else {
+              setIsAIChatOpen(true);
+            }
+          }}
           className="fixed bottom-5 right-5 z-40 p-3.5 rounded-2xl bg-linear-to-r from-purple-600 to-indigo-600 text-white shadow-xl shadow-purple-600/30 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 font-bold text-xs"
         >
           <Sparkles className="w-5 h-5 animate-pulse" />
@@ -126,6 +144,10 @@ function MainApp() {
       <GeminiChatbot
         isOpen={isAIChatOpen}
         onClose={() => setIsAIChatOpen(false)}
+        onRequireLogin={() => {
+          setIsAIChatOpen(false);
+          setCurrentTab('login');
+        }}
       />
 
       {/* Footer */}
