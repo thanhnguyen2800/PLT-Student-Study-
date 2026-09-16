@@ -242,11 +242,24 @@ app.patch('/api/admin/users/:uid/role', (req, res) => {
   }
 });
 
-app.delete('/api/admin/users/:uid', (req, res) => {
+app.delete('/api/admin/users/:uid', async (req, res) => {
   try {
     const { uid } = req.params;
     const { actorId, actorName } = req.body || {};
-    dataStore.assertCanManageUser(actorId, uid);
+    const localTarget = dataStore.getUserById(uid);
+    if (localTarget) {
+      dataStore.assertCanManageUser(actorId, uid);
+    } else if (isFirestoreReady()) {
+      const users = await loadAllUsersFromFirestore();
+      const cloudTarget = users.find(user => user.uid === uid);
+      const actor = dataStore.getUserById(actorId);
+      if (!cloudTarget || !actor || actor.uid === cloudTarget.uid ||
+          (actor.role !== 'SUPER_ADMIN' && !(actor.role === 'ADMIN' && (cloudTarget.role === 'TEACHER' || cloudTarget.role === 'PLAYER')))) {
+        throw new Error('Bạn không có quyền khóa hoặc xóa tài khoản này');
+      }
+    } else {
+      dataStore.assertCanManageUser(actorId, uid);
+    }
     const success = dataStore.deleteUser(uid, actorId);
     if (!success) {
       return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });

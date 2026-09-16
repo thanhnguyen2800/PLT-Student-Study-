@@ -56,6 +56,13 @@ async function getFirebaseUsers(): Promise<UserProfile[]> {
     .filter(user => Boolean(user.uid && user.email));
 }
 
+async function getFirebaseUserById(uid: string): Promise<UserProfile | null> {
+  const db = getClientFirestore();
+  if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
+  const snapshot = await getDoc(doc(db, 'users', uid));
+  return snapshot.exists() ? snapshot.data() as UserProfile : null;
+}
+
 async function saveFirebaseUser(user: UserProfile): Promise<UserProfile> {
   const db = getClientFirestore();
   if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
@@ -357,8 +364,21 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
   if (path.startsWith('/api/admin/users/') && method === 'DELETE') {
     const id = path.split('/')[4];
     try {
-      dataStore.assertCanManageUser(body.actorId, id);
-      dataStore.deleteUser(id, body.actorId);
+      if (isFirebaseConfigured()) {
+        const target = await getFirebaseUserById(id);
+        const actor = dataStore.getUserById(body.actorId);
+        if (!target || !actor || actor.uid === target.uid ||
+            (actor.role !== 'SUPER_ADMIN' && !(actor.role === 'ADMIN' && (target.role === 'TEACHER' || target.role === 'PLAYER')))) {
+          throw new Error('Bạn không có quyền khóa hoặc xóa tài khoản này');
+        }
+        const db = getClientFirestore();
+        if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
+        await deleteDoc(doc(db, 'users', id));
+        dataStore.deleteUser(id, body.actorId);
+      } else {
+        dataStore.assertCanManageUser(body.actorId, id);
+        dataStore.deleteUser(id, body.actorId);
+      }
       return makeJsonResponse({ success: true });
     } catch (e: any) {
       return makeJsonResponse({ success: false, error: { message: e.message } }, 403);

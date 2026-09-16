@@ -159,7 +159,19 @@ export default async function handler(req: any, res: any) {
 
     if (path.length === 2 && path[0] === 'users' && req.method === 'DELETE') {
       const uid = path[1];
-      dataStore.assertCanManageUser(actorId, uid);
+      const localTarget = dataStore.getUserById(uid);
+      if (localTarget) {
+        dataStore.assertCanManageUser(actorId, uid);
+      } else if (isFirestoreReady()) {
+        const cloudTarget = (await loadAllUsersFromFirestore()).find(user => user.uid === uid);
+        const actor = dataStore.getUserById(actorId);
+        if (!cloudTarget || !actor || actor.uid === cloudTarget.uid ||
+            (actor.role !== 'SUPER_ADMIN' && !(actor.role === 'ADMIN' && (cloudTarget.role === 'TEACHER' || cloudTarget.role === 'PLAYER')))) {
+          throw new Error('Bạn không có quyền khóa hoặc xóa tài khoản này');
+        }
+      } else {
+        dataStore.assertCanManageUser(actorId, uid);
+      }
       dataStore.deleteUser(uid, actorId);
       if (isFirestoreReady()) await deleteUserFromFirestore(uid);
       return json(res, 200, { success: true });
