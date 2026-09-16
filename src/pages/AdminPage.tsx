@@ -268,20 +268,6 @@ export const AdminPage: React.FC = () => {
   const userList = Array.isArray(users) ? users : [];
   const logList = Array.isArray(auditLogs) ? auditLogs : [];
 
-  const handleExportCsv = () => {
-    const headers = ['Email', 'DisplayName', 'Role', 'Status', 'Department', 'CreatedAt'];
-    const rows = userList.map(u => [u.email, `"${u.displayName || ''}"`, u.role, u.status, `"${u.department || ''}"`, u.createdAt || '']);
-    const csvStr = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `studentstudy_users_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const filteredUsers = userList.filter(u => {
     if (!u) return false;
     const name = (u.displayName || '').toLowerCase();
@@ -388,13 +374,6 @@ export const AdminPage: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-              <button
-                onClick={handleExportCsv}
-                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Xuất CSV
-              </button>
               <button
                 onClick={() => {
                   setShowCsvModal(true);
