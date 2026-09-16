@@ -1,7 +1,8 @@
 import { dataStore } from './db/store';
 import { getClientFirestore, isFirebaseConfigured } from './firebase/client';
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
-import { GameSession, Player, Quiz } from '../types';
+import { GameSession, Player, Quiz, UserProfile, UserRole } from '../types';
+import { parseCSV } from '../utils/csv';
 
 function removeUndefined(value: any): any {
   if (Array.isArray(value)) return value.map(removeUndefined);
@@ -32,6 +33,43 @@ async function saveFirebaseQuiz(quiz: Quiz): Promise<Quiz> {
   if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
   await setDoc(doc(db, 'quizzes', quiz.id), removeUndefined(quiz), { merge: true });
   return quiz;
+}
+
+async function getFirebaseUserByEmail(email: string): Promise<UserProfile | null> {
+  const db = getClientFirestore();
+  if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
+  const snapshot = await getDocs(collection(db, 'users'));
+  const target = email.toLowerCase().trim();
+  const user = snapshot.docs
+    .map(item => item.data() as UserProfile)
+    .find(item => item.email?.toLowerCase().trim() === target);
+  return user || null;
+}
+
+async function saveFirebaseUser(user: UserProfile): Promise<UserProfile> {
+  const db = getClientFirestore();
+  if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
+  await setDoc(doc(db, 'users', user.uid), removeUndefined({
+    ...user,
+    syncedAt: new Date().toISOString(),
+  }), { merge: true });
+  return user;
+}
+
+async function createFallbackUser(body: any): Promise<UserProfile> {
+  const email = String(body.email || '').toLowerCase().trim();
+  if (isFirebaseConfigured() && await getFirebaseUserByEmail(email)) {
+    throw new Error(`Email "${email}" đã tồn tại trên hệ thống`);
+  }
+
+  const user = dataStore.createUser({ ...body, email });
+  try {
+    if (isFirebaseConfigured()) await saveFirebaseUser(user);
+    return user;
+  } catch (error) {
+    dataStore.deleteUser(user.uid);
+    throw error;
+  }
 }
 
 async function getFirebaseGameSession(id: string): Promise<GameSession | null> {
@@ -225,10 +263,48 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
 
   if (path === '/api/admin/users' && method === 'POST') {
     try {
-      const user = dataStore.createUser(body);
+      const user = await createFallbackUser(body);
       return makeJsonResponse({ success: true, data: user }, 201);
     } catch (e: any) {
       return makeJsonResponse({ success: false, error: { message: e.message } }, 400);
+    }
+  }
+
+  if (path === '/api/admin/users/import-csv' && method === 'POST') {
+    try {
+      const csvContent = body.csvContent || body.csvString;
+      if (!csvContent) throw new Error('Vui lòng cung cấp nội dung file CSV hợp lệ');
+      const { validRows, invalidRows, totalRows } = parseCSV(csvContent);
+      const errors = invalidRows.map(item => ({ line: item.line, email: 'N/A', message: item.errors.join('; ') }));
+      let created = 0;
+
+      for (const row of validRows) {
+        try {
+          if (row.action !== 'CREATE') {
+            throw new Error('Bản nhập CSV trên môi trường này chỉ hỗ trợ action CREATE');
+          }
+          await createFallbackUser({
+            email: row.email,
+            displayName: row.displayName || row.email.split('@')[0],
+            password: row.password || 'Student@123',
+            role: (row.role as UserRole) || 'PLAYER',
+            status: row.status || 'ACTIVE',
+            department: row.department,
+            phone: row.phone,
+            createdBy: body.actorName || body.actorId || 'ADMIN',
+          });
+          created++;
+        } catch (error: any) {
+          errors.push({ line: row.line, email: row.email, message: error.message || 'Lỗi xử lý dòng dữ liệu' });
+        }
+      }
+
+      return makeJsonResponse({
+        success: true,
+        data: { total: totalRows, success: created, failed: errors.length, created, updated: 0, deleted: 0, imported: created, errors },
+      });
+    } catch (error: any) {
+      return makeJsonResponse({ success: false, error: { message: error.message } }, 400);
     }
   }
 
