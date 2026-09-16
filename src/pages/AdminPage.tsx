@@ -248,6 +248,23 @@ export const AdminPage: React.FC = () => {
     event.target.value = '';
   };
 
+  const handleDownloadCsvTemplate = () => {
+    const template = [
+      'action,email,displayName,password,role,status,department,phone',
+      'CREATE,student05@studentstudy.edu,Nguyễn Mai Lan,Admin@123,PLAYER,ACTIVE,Khoa CNTT,0912345678',
+      'CREATE,student06@studentstudy.edu,Đặng Văn Nam,Admin@123,PLAYER,ACTIVE,Khoa Kinh Tế,0912345679',
+    ].join('\r\n');
+    const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'studentstudy_users_template.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const userList = Array.isArray(users) ? users : [];
   const logList = Array.isArray(auditLogs) ? auditLogs : [];
 
@@ -689,11 +706,21 @@ export const AdminPage: React.FC = () => {
               Định dạng các cột: <code>action,email,displayName,password,role,status,department,phone</code>
             </p>
 
-            <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
-              <Upload className="w-3.5 h-3.5" />
-              Chọn file CSV
-              <input type="file" accept=".csv,text/csv" onChange={handleCsvFileChange} className="hidden" />
-            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadCsvTemplate}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-indigo-200 dark:border-indigo-800 text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Tải CSV mẫu
+              </button>
+              <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
+                <Upload className="w-3.5 h-3.5" />
+                Chọn file CSV
+                <input type="file" accept=".csv,text/csv" onChange={handleCsvFileChange} className="hidden" />
+              </label>
+            </div>
 
             <textarea
               rows={6}
