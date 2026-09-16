@@ -81,7 +81,10 @@ async function createFallbackUser(body: any): Promise<UserProfile> {
 
   const user = dataStore.createUser({ ...body, email });
   try {
-    if (isFirebaseConfigured()) await saveFirebaseUser(user);
+    if (isFirebaseConfigured()) {
+      user.passwordHash = await hashPassword(String(body.password || 'Student@123'));
+      await saveFirebaseUser(user);
+    }
     return user;
   } catch (error) {
     dataStore.deleteUser(user.uid);
@@ -127,6 +130,14 @@ function parseJsonBody(init?: RequestInit): any {
   }
 }
 
+async function hashPassword(password: string): Promise<string> {
+  const bytes = new TextEncoder().encode(password.trim());
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 /**
  * Client-Side API Router: handles /api/* requests when backend server is not available
  * (such as in static Vercel, Netlify, or offline deployments).
@@ -142,19 +153,36 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
     try {
       const { email, password } = body;
       const res = dataStore.authenticate(email, password);
-      if (!res) {
+      if (res) {
         return makeJsonResponse({
-          success: false,
-          error: { message: 'Email hoặc mật khẩu không chính xác' },
-        }, 401);
+          success: true,
+          data: { user: res.user, token: 'token_' + res.user.uid + '_' + Date.now() },
+        });
       }
+
+      if (isFirebaseConfigured()) {
+        const user = await getFirebaseUserByEmail(email);
+        const suppliedPassword = String(password || '').trim();
+        const passwordHash = await hashPassword(suppliedPassword);
+        const legacyPasswords = ['Admin@123', 'Student@123', 'Teacher@123', 'admin123', 'teacher123', 'student123', '123456', 'password'];
+        const validPassword = user && user.status !== 'DISABLED' && user.status !== 'LOCKED' &&
+          ((user.passwordHash && user.passwordHash === passwordHash) ||
+            (!user.passwordHash && legacyPasswords.includes(suppliedPassword)));
+
+        if (validPassword && user) {
+          user.lastLoginAt = new Date().toISOString();
+          await saveFirebaseUser(user);
+          return makeJsonResponse({
+            success: true,
+            data: { user, token: 'token_' + user.uid + '_' + Date.now() },
+          });
+        }
+      }
+
       return makeJsonResponse({
-        success: true,
-        data: {
-          user: res.user,
-          token: 'token_' + res.user.uid + '_' + Date.now(),
-        },
-      });
+        success: false,
+        error: { message: 'Email hoặc mật khẩu không chính xác' },
+      }, 401);
     } catch (err: any) {
       return makeJsonResponse({
         success: false,
