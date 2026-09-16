@@ -90,6 +90,7 @@ function MainApp() {
           <SoloStudyPage
             quizId={selectedQuizId}
             onBack={() => setCurrentTab('quizzes')}
+            onRequireLogin={() => setCurrentTab('login')}
           />
         )}
 
@@ -97,6 +98,7 @@ function MainApp() {
           <FlashcardsPage
             quizId={selectedQuizId}
             onBack={() => setCurrentTab('quizzes')}
+            onRequireLogin={() => setCurrentTab('login')}
           />
         )}
 

@@ -19,6 +19,9 @@ import { useAuth } from '../context/AuthContext';
 import { Quiz, QuizAttempt } from '../types';
 import { DifficultyBadge } from '../components/common/Badge';
 
+// 3 Pre-installed default quizzes available for guest preview
+const DEFAULT_QUIZ_IDS = ['quiz-web-dev-01', 'quiz-science-ai-02', 'quiz-english-comm-03'];
+
 interface DashboardProps {
   onNavigate: (tab: string, extraId?: string) => void;
   openAIChat: () => void;
@@ -29,6 +32,42 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate, openAIChat
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [pinInput, setPinInput] = useState('');
   const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
+
+  const isGuest = !currentUser;
+
+  // Unauthenticated guests can ONLY see and access the 3 default preview quizzes
+  // Authenticated students and teachers can see all quizzes including newly created ones
+  const visibleQuizzes = isGuest
+    ? quizzes.filter(q => DEFAULT_QUIZ_IDS.includes(q.id))
+    : quizzes.slice(0, 3);
+
+  const handleStudy = (targetQuizId: string) => {
+    if (isGuest && !DEFAULT_QUIZ_IDS.includes(targetQuizId)) {
+      onNavigate('login');
+      return;
+    }
+    onNavigate('study', targetQuizId);
+  };
+
+  const handleFlashcards = (targetQuizId: string) => {
+    if (isGuest && !DEFAULT_QUIZ_IDS.includes(targetQuizId)) {
+      onNavigate('login');
+      return;
+    }
+    onNavigate('flashcards', targetQuizId);
+  };
+
+  const handleHost = (targetQuizId: string) => {
+    if (isGuest) {
+      onNavigate('login');
+      return;
+    }
+    if (!canAccess(['TEACHER', 'ADMIN', 'SUPER_ADMIN'])) {
+      alert('Chỉ Giảng viên, Quản trị viên và Quản lý mới có quyền tạo và điều hành phòng thi trực tuyến (Host). Thí sinh vui lòng tham gia bằng mã PIN.');
+      return;
+    }
+    onNavigate('host', targetQuizId);
+  };
 
   useEffect(() => {
     fetch('/api/quizzes')
@@ -224,7 +263,7 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate, openAIChat
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {quizzes.slice(0, 3).map((quiz) => (
+          {visibleQuizzes.map((quiz) => (
             <div
               key={quiz.id}
               className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs hover:shadow-lg transition-all flex flex-col"
@@ -261,24 +300,24 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate, openAIChat
                 {/* Quick Actions */}
                 <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                   <button
-                    onClick={() => onNavigate('study', quiz.id)}
-                    className="flex-1 py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                    onClick={() => handleStudy(quiz.id)}
+                    className="flex-1 py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                     Làm bài
                   </button>
 
                   <button
-                    onClick={() => onNavigate('flashcards', quiz.id)}
-                    className="py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors"
+                    onClick={() => handleFlashcards(quiz.id)}
+                    className="py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     Flashcard
                   </button>
 
                   <button
-                    onClick={() => onNavigate('host', quiz.id)}
-                    title="Tổ chức thi đấu Kahoot"
-                    className="py-2 px-3 rounded-xl bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 text-amber-700 dark:text-amber-300 text-xs font-semibold border border-amber-200 dark:border-amber-800 transition-colors"
+                    onClick={() => handleHost(quiz.id)}
+                    title={isGuest ? 'Đăng nhập để tạo phòng thi đấu' : 'Tổ chức thi đấu Kahoot'}
+                    className="py-2 px-3 rounded-xl bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 text-amber-700 dark:text-amber-300 text-xs font-semibold border border-amber-200 dark:border-amber-800 transition-colors cursor-pointer"
                   >
                     <Radio className="w-3.5 h-3.5" />
                   </button>

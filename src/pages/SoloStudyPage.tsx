@@ -10,19 +10,23 @@ import {
   BookOpen, 
   ChevronRight,
   Flame,
-  HelpCircle
+  HelpCircle,
+  Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Quiz, Question, QuizAttempt } from '../types';
 import { speakText } from '../utils/tts';
 import { useAuth } from '../context/AuthContext';
 
+const DEFAULT_QUIZ_IDS = ['quiz-web-dev-01', 'quiz-science-ai-02', 'quiz-english-comm-03'];
+
 interface SoloStudyProps {
   quizId: string;
   onBack: () => void;
+  onRequireLogin?: () => void;
 }
 
-export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack }) => {
+export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequireLogin }) => {
   const { currentUser } = useAuth();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -180,6 +184,39 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack }) => {
     setScore(0);
     setAnswersHistory([]);
   };
+
+  if (!currentUser && !DEFAULT_QUIZ_IDS.includes(quizId)) {
+    return (
+      <div className="max-w-md mx-auto py-16 text-center space-y-4 animate-in fade-in">
+        <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto shadow-sm">
+          <Lock className="w-8 h-8" />
+        </div>
+        <h3 className="text-xl font-black text-slate-900 dark:text-white">
+          Yêu Cầu Đăng Nhập Học Viên
+        </h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+          Bài quiz này do Giảng viên vừa tạo mới và chỉ dành riêng cho Học viên đã được cấp tài khoản. Người dùng chưa đăng nhập chỉ có thể trải nghiệm 3 bộ Quiz mẫu mặc định của hệ thống.
+        </p>
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <button
+            onClick={onBack}
+            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer"
+          >
+            Quay lại kho Quiz
+          </button>
+          <button
+            onClick={() => {
+              if (onRequireLogin) onRequireLogin();
+              else onBack();
+            }}
+            className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+          >
+            Đăng nhập ngay
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!quiz || !currentQ) {
     return (
