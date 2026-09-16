@@ -512,7 +512,15 @@ const handleCreateGame = async (req: express.Request, res: express.Response) => 
       });
     }
 
-    if (!quizId) {
+    let targetQuizId = quizId;
+    if (!targetQuizId) {
+      const allQ = dataStore.getAllQuizzes();
+      if (allQ.length > 0) {
+        targetQuizId = allQ[0].id;
+      }
+    }
+
+    if (!targetQuizId) {
       return res.status(400).json({ success: false, error: { message: 'Vui lòng chọn Quiz để tạo phòng thi đấu' } });
     }
 
@@ -521,7 +529,7 @@ const handleCreateGame = async (req: express.Request, res: express.Response) => 
       displayName: hostName || host?.displayName || 'Host Giảng viên',
     };
 
-    const result = dataStore.createGameRoom(quizId, hostData);
+    const result = dataStore.createGameRoom(targetQuizId, hostData);
 
     // Sync to Cloud Firestore Realtime Database
     saveGameSessionToFirestore(result.session).catch(e => {

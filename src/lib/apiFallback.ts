@@ -182,37 +182,73 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
 
   // 5. Game sessions / Kahoot rooms
   if (path === '/api/game/create' && method === 'POST') {
-    const res = dataStore.createGameRoom(body.quizId, body.host);
-    return makeJsonResponse({ success: true, data: res.session, session: res.session });
+    try {
+      const hostData = {
+        uid: body.hostId || body.host?.uid || 'host_teacher',
+        displayName: body.hostName || body.host?.displayName || 'ThS. Trần Văn Minh',
+      };
+      const res = dataStore.createGameRoom(body.quizId, hostData);
+      return makeJsonResponse({
+        success: true,
+        data: {
+          session: res.session,
+          quiz: res.quiz,
+        },
+        session: res.session,
+        quiz: res.quiz,
+      });
+    } catch (err: any) {
+      return makeJsonResponse({ success: false, error: { message: err.message || 'Không thể tạo phòng' } }, 400);
+    }
   }
 
   if (path === '/api/game/join' && method === 'POST') {
-    const res = dataStore.joinGameRoom(body.pin, { name: body.playerName, avatar: body.avatar });
-    return makeJsonResponse({ success: true, data: res });
+    try {
+      const res = dataStore.joinGameRoom(body.pin, { name: body.playerName, avatar: body.avatar });
+      return makeJsonResponse({ success: true, data: res });
+    } catch (err: any) {
+      return makeJsonResponse({ success: false, error: { message: err.message } }, 400);
+    }
   }
 
   if (path.startsWith('/api/game/') && path.endsWith('/start') && method === 'POST') {
     const id = path.split('/')[3];
-    const session = dataStore.startGameRoom(id);
-    return makeJsonResponse({ success: true, data: session, session });
+    try {
+      const session = dataStore.startGameRoom(id);
+      return makeJsonResponse({ success: true, data: session, session });
+    } catch (err: any) {
+      return makeJsonResponse({ success: false, error: { message: err.message } }, 400);
+    }
   }
 
   if (path.startsWith('/api/game/') && path.endsWith('/answer') && method === 'POST') {
     const id = path.split('/')[3];
-    const res = dataStore.submitRoomAnswer(id, body.playerId, body.answer, body.timeSpent || 0);
-    return makeJsonResponse({ success: true, data: res });
+    try {
+      const res = dataStore.submitRoomAnswer(id, body.playerId, body.answer, body.timeSpent || 0);
+      return makeJsonResponse({ success: true, data: res });
+    } catch (err: any) {
+      return makeJsonResponse({ success: false, error: { message: err.message } }, 400);
+    }
   }
 
   if (path.startsWith('/api/game/') && path.endsWith('/next') && method === 'POST') {
     const id = path.split('/')[3];
-    const session = dataStore.nextRoomQuestion(id);
-    return makeJsonResponse({ success: true, data: session, session });
+    try {
+      const session = dataStore.nextRoomQuestion(id);
+      return makeJsonResponse({ success: true, data: session, session });
+    } catch (err: any) {
+      return makeJsonResponse({ success: false, error: { message: err.message } }, 400);
+    }
   }
 
   if (path.startsWith('/api/game/') && path.endsWith('/end') && method === 'POST') {
     const id = path.split('/')[3];
-    const session = dataStore.endOrExpireGameRoom(id);
-    return makeJsonResponse({ success: true, data: session, session });
+    try {
+      const session = dataStore.endOrExpireGameRoom(id);
+      return makeJsonResponse({ success: true, data: session, session });
+    } catch (err: any) {
+      return makeJsonResponse({ success: false, error: { message: err.message } }, 400);
+    }
   }
 
   if (path.startsWith('/api/game/') && method === 'GET') {

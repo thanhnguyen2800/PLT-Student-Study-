@@ -57,16 +57,40 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
     })
       .then(res => res.json())
       .then(json => {
-        if (json.success && json.data) {
-          setSession(json.data.session);
-          setQuiz(json.data.quiz);
-          startPolling(json.data.session.id);
+        const sessionObj: GameSession | undefined = json.data?.session || json.session || (json.data?.id ? json.data : undefined);
+        const quizObj: Quiz | undefined = json.data?.quiz || json.quiz;
+
+        if (json.success && sessionObj && sessionObj.id) {
+          setSession(sessionObj);
+          if (quizObj) {
+            setQuiz(quizObj);
+          } else if (sessionObj.questions && sessionObj.questions.length > 0) {
+            setQuiz({
+              id: sessionObj.quizId,
+              title: sessionObj.quizTitle,
+              description: '',
+              ownerId: sessionObj.hostId,
+              ownerName: sessionObj.hostName,
+              category: 'Chung',
+              tags: [],
+              difficulty: 'MEDIUM',
+              coverImageUrl: '',
+              visibility: 'PUBLIC',
+              status: 'PUBLISHED',
+              playCount: 0,
+              questionCount: sessionObj.questions.length,
+              createdAt: sessionObj.createdAt,
+              updatedAt: sessionObj.updatedAt,
+              questions: sessionObj.questions,
+            });
+          }
+          startPolling(sessionObj.id);
         } else {
           setInitError(json.error?.message || 'Không thể tạo phòng thi đấu.');
         }
       })
       .catch(err => {
-        console.error(err);
+        console.error('Error creating game:', err);
         setInitError('Lỗi kết nối máy chủ khi tạo phòng thi.');
       });
 

@@ -758,7 +758,30 @@ class DataStore {
 
   // ===================== MULTIPLAYER GAME ROOMS (REALTIME DB) =====================
   public createGameRoom(quizId: string, host?: { uid?: string; displayName?: string }): { session: GameSession; quiz: Quiz } {
-    const quiz = this.quizzes.get(quizId);
+    let quiz = this.quizzes.get(quizId);
+    if (!quiz && quizId) {
+      for (const q of this.quizzes.values()) {
+        if (q.id === quizId) {
+          quiz = q;
+          break;
+        }
+      }
+    }
+    if (!quiz && quizId) {
+      const found = INITIAL_QUIZZES.find(q => q.id === quizId);
+      if (found) {
+        quiz = found;
+        this.quizzes.set(quiz.id, quiz);
+      }
+    }
+    // Fallback to first available quiz if quizId not found or empty
+    if (!quiz) {
+      quiz = Array.from(this.quizzes.values())[0] || INITIAL_QUIZZES[0];
+      if (quiz && !this.quizzes.has(quiz.id)) {
+        this.quizzes.set(quiz.id, quiz);
+      }
+    }
+
     if (!quiz || !quiz.questions || quiz.questions.length === 0) {
       throw new Error('Quiz không tồn tại hoặc chưa có câu hỏi để tạo phòng thi');
     }
