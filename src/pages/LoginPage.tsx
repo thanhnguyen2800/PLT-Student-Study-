@@ -107,7 +107,7 @@ export const LoginPage: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-indigo-600/20"
+            className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-indigo-600/20 cursor-pointer"
           >
             {isLoading ? (
               <span>Đang xác thực...</span>
@@ -119,6 +119,80 @@ export const LoginPage: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
             )}
           </button>
         </form>
+
+        {/* Quick Demo Accounts Helper */}
+        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Tài khoản mẫu để trải nghiệm & chấm điểm
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2">
+            {[
+              {
+                role: 'Giảng viên',
+                name: 'ThS. Trần Văn Minh',
+                email: 'teacher@studentstudy.edu',
+                pass: 'Admin@123',
+                badge: 'Tạo quiz & Host',
+                badgeColor: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+              },
+              {
+                role: 'Học viên',
+                name: 'Lê Hoàng Long',
+                email: 'student01@studentstudy.edu',
+                pass: 'Admin@123',
+                badge: 'Ôn tập & Thi đấu',
+                badgeColor: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+              },
+              {
+                role: 'Quản trị viên',
+                name: 'Ban Giám Hiệu',
+                email: 'admin@studentstudy.edu',
+                pass: 'Admin@123',
+                badge: 'Toàn quyền',
+                badgeColor: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300',
+              },
+            ].map((acc) => (
+              <button
+                key={acc.email}
+                type="button"
+                onClick={async () => {
+                  setEmail(acc.email);
+                  setPassword(acc.pass);
+                  setIsLoading(true);
+                  setErrorMessage(null);
+                  try {
+                    await login(acc.email, acc.pass);
+                    onSuccess();
+                  } catch (err: any) {
+                    setErrorMessage(err.message || 'Đăng nhập không thành công');
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                className="w-full text-left p-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 hover:border-indigo-500 dark:hover:border-indigo-500 hover:bg-indigo-50/40 dark:hover:bg-slate-800/70 transition-all flex items-center justify-between group cursor-pointer"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{acc.role}</span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${acc.badgeColor}`}>
+                      {acc.badge}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                    {acc.email} • Mật khẩu: <span className="font-semibold text-slate-700 dark:text-slate-300">{acc.pass}</span>
+                  </div>
+                </div>
+                <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-1 transition-transform flex items-center gap-1 shrink-0 ml-2">
+                  1-Click Vào
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
 
       </div>
 
