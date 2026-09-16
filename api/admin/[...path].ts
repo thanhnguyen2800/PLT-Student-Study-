@@ -120,7 +120,10 @@ async function importCsv(body: any, actorId?: string) {
 export default async function handler(req: any, res: any) {
   try {
     getBackendFirestore();
-    const path = Array.isArray(req.query.path) ? req.query.path : [req.query.path].filter(Boolean);
+    const rawPath = req.query.path;
+    const path = Array.isArray(rawPath)
+      ? rawPath.flatMap(segment => String(segment).split('/')).filter(Boolean)
+      : String(rawPath || '').split('/').filter(Boolean);
     const actorId = req.body?.actorId || req.body?.actorUid;
 
     if (path.length === 1 && path[0] === 'users' && req.method === 'GET') {

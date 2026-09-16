@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import {
   getFirestore,
@@ -15,6 +13,7 @@ import {
   limit,
 } from 'firebase/firestore';
 import { Quiz, UserProfile, QuizAttempt, AuditLog } from '../../types';
+import appletConfig from '../../../firebase-applet-config.json';
 
 interface FirebaseConfig {
   projectId: string;
@@ -36,14 +35,15 @@ export function getBackendFirestore(): Firestore | null {
   }
 
   try {
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (!fs.existsSync(configPath)) {
-      console.warn('[Firebase Server] firebase-applet-config.json not found');
-      return null;
-    }
-
-    const raw = fs.readFileSync(configPath, 'utf8');
-    const config: FirebaseConfig = JSON.parse(raw);
+    const config: FirebaseConfig = {
+      ...appletConfig,
+      projectId: process.env.FIREBASE_PROJECT_ID || appletConfig.projectId,
+      appId: process.env.FIREBASE_APP_ID || appletConfig.appId,
+      apiKey: process.env.FIREBASE_API_KEY || appletConfig.apiKey,
+      authDomain: process.env.FIREBASE_AUTH_DOMAIN || appletConfig.authDomain,
+      firestoreDatabaseId: process.env.FIRESTORE_DATABASE_ID || appletConfig.firestoreDatabaseId,
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET || appletConfig.storageBucket,
+    };
 
     if (!config.projectId || !config.apiKey) {
       console.warn('[Firebase Server] Missing projectId or apiKey in firebase-applet-config.json');
