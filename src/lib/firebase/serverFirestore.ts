@@ -179,6 +179,12 @@ export async function saveUserToFirestore(user: UserProfile): Promise<boolean> {
   }
 }
 
+export async function getUserByEmailFromFirestore(email: string): Promise<UserProfile | null> {
+  const users = await loadAllUsersFromFirestore();
+  const target = email.toLowerCase().trim();
+  return users.find(user => user.email.toLowerCase().trim() === target) || null;
+}
+
 export async function deleteUserFromFirestore(uid: string): Promise<boolean> {
   const db = getBackendFirestore();
   if (!db || !uid) return false;

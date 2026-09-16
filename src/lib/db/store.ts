@@ -208,27 +208,6 @@ class DataStore {
         return u;
       }
     }
-    // Support friendly domain aliases (@plt.edu.vn, @gmail.com, etc.)
-    if (target.startsWith('admin@') || target.startsWith('admin.')) {
-      for (const u of this.users.values()) {
-        if (u.role === 'SUPER_ADMIN') return u;
-      }
-    }
-    if (target.startsWith('teacher') || target.startsWith('giangvien')) {
-      for (const u of this.users.values()) {
-        if (u.role === 'TEACHER') return u;
-      }
-    }
-    if (target.startsWith('student') || target.startsWith('hocvien')) {
-      for (const u of this.users.values()) {
-        if (u.role === 'PLAYER') return u;
-      }
-    }
-    if (target.startsWith('quanly') || target.startsWith('manager')) {
-      for (const u of this.users.values()) {
-        if (u.role === 'ADMIN') return u;
-      }
-    }
     return null;
   }
 

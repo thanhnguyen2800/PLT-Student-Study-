@@ -224,13 +224,28 @@ export const AdminPage: React.FC = () => {
       });
       const json = await res.json();
       if (json.success) {
-        setCsvResult(json.data);
+        setCsvResult({
+          imported: json.data.imported,
+          errors: (json.data.errors || []).map((error: { line: number; email: string; message: string }) =>
+            `Dòng ${error.line} (${error.email}): ${error.message}`
+          ),
+        });
         fetchUsers();
         fetchLogs();
+      } else {
+        alert(json.error?.message || 'Không thể nhập danh sách tài khoản');
       }
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleCsvFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setCsvContent(await file.text());
+    setCsvResult(null);
+    event.target.value = '';
   };
 
   const userList = Array.isArray(users) ? users : [];
@@ -671,20 +686,35 @@ export const AdminPage: React.FC = () => {
             </h3>
             
             <p className="text-xs text-slate-500">
-              Định dạng các cột: <code>email,displayName,role,department,password</code>
+              Định dạng các cột: <code>action,email,displayName,password,role,status,department,phone</code>
             </p>
+
+            <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
+              <Upload className="w-3.5 h-3.5" />
+              Chọn file CSV
+              <input type="file" accept=".csv,text/csv" onChange={handleCsvFileChange} className="hidden" />
+            </label>
 
             <textarea
               rows={6}
               value={csvContent}
               onChange={e => setCsvContent(e.target.value)}
-              placeholder={`email,displayName,role,department,password\nstudent05@studentstudy.edu,Nguyễn Mai Lan,PLAYER,Khoa CNTT,Admin@123\nstudent06@studentstudy.edu,Đặng Văn Nam,PLAYER,Khoa Kinh Tế,Admin@123`}
+              placeholder={`action,email,displayName,password,role,status,department,phone\nCREATE,student05@studentstudy.edu,Nguyễn Mai Lan,Admin@123,PLAYER,ACTIVE,Khoa CNTT,0912345678\nCREATE,student06@studentstudy.edu,Đặng Văn Nam,Admin@123,PLAYER,ACTIVE,Khoa Kinh Tế,0912345679`}
               className="w-full p-3 font-mono text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
             />
 
             {csvResult && (
-              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-xs font-semibold">
-                ✓ Đã nhập thành công {csvResult.imported} tài khoản vào hệ thống!
+              <div className={`p-3 rounded-xl text-xs font-semibold ${
+                csvResult.errors.length > 0
+                  ? 'bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
+                  : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
+              }`}>
+                <p>Đã nhập thành công {csvResult.imported} tài khoản vào Firebase.</p>
+                {csvResult.errors.length > 0 && (
+                  <ul className="mt-2 space-y-1 font-normal">
+                    {csvResult.errors.map(error => <li key={error}>{error}</li>)}
+                  </ul>
+                )}
               </div>
             )}
 

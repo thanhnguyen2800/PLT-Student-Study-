@@ -14,6 +14,7 @@ import {
   deleteQuizFromFirestore,
   loadAllQuizzesFromFirestore,
   saveUserToFirestore,
+  getUserByEmailFromFirestore,
   deleteUserFromFirestore,
   loadAllUsersFromFirestore,
   saveAttemptToFirestore,
@@ -25,6 +26,9 @@ import {
 } from './src/lib/firebase/serverFirestore.js';
 
 dotenv.config();
+
+// Initialize Firestore before admin routes decide which data source is authoritative.
+getBackendFirestore();
 
 const app = express();
 const PORT = 3000;
@@ -103,9 +107,11 @@ app.get('/api/admin/stats', (req, res) => {
   }
 });
 
-app.get('/api/admin/users', (req, res) => {
+app.get('/api/admin/users', async (req, res) => {
   try {
     const { search, role, status, page, limit } = req.query;
+    const firestoreUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
+    const sourceUsers = firestoreUsers.length > 0 ? firestoreUsers : dataStore.listUsers({ limit: 1000 }).users;
     const result = dataStore.listUsers({
       search: search as string,
       role: role as string,
@@ -113,26 +119,41 @@ app.get('/api/admin/users', (req, res) => {
       page: page ? parseInt(page as string, 10) : 1,
       limit: limit ? parseInt(limit as string, 10) : 1000,
     });
+    const filteredUsers = sourceUsers.filter(user => {
+      const queryText = String(search || '').toLowerCase();
+      return (!queryText || user.email.toLowerCase().includes(queryText) || user.displayName.toLowerCase().includes(queryText))
+        && (!role || user.role === role)
+        && (!status || user.status === status);
+    });
+    const users = firestoreUsers.length > 0 ? filteredUsers : result.users;
     res.json({
       success: true,
-      data: result.users,
-      users: result.users,
-      total: result.total,
-      page: result.page,
-      totalPages: result.totalPages,
+      data: users,
+      users,
+      total: users.length,
+      page: 1,
+      totalPages: 1,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 });
 
-app.post('/api/admin/users', (req, res) => {
+app.post('/api/admin/users', async (req, res) => {
   try {
     const { email, displayName, password, role, status, department, phone, createdBy, actorId, actorName } = req.body;
     if (!email || !displayName || !role) {
       return res.status(400).json({
         success: false,
         error: { code: 'VALIDATION_ERROR', message: 'Thiếu các thông tin bắt buộc (email, displayName, role)' },
+      });
+    }
+
+    const firestoreUser = isFirestoreReady() ? await getUserByEmailFromFirestore(email) : null;
+    if (firestoreUser || (!isFirestoreReady() && dataStore.getUserByEmail(email))) {
+      return res.status(409).json({
+        success: false,
+        error: { code: 'DUPLICATE_EMAIL', message: `Email "${email}" đã tồn tại trên hệ thống` },
       });
     }
 
@@ -147,7 +168,13 @@ app.post('/api/admin/users', (req, res) => {
       createdBy: actorName || createdBy || actorId || 'ADMIN',
     });
 
-    saveUserToFirestore(newUser).catch(e => console.warn('[Firestore] Async save user failed:', e));
+    if (isFirestoreReady() && !(await saveUserToFirestore(newUser))) {
+      dataStore.deleteUser(newUser.uid);
+      return res.status(503).json({
+        success: false,
+        error: { code: 'FIRESTORE_WRITE_FAILED', message: 'Không thể lưu tài khoản vào Firebase. Vui lòng thử lại.' },
+      });
+    }
     res.status(201).json({ success: true, data: newUser });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { message: err.message } });
@@ -244,7 +271,7 @@ app.post('/api/admin/users/:uid/reset-password', (req, res) => {
 });
 
 // CSV Import User Endpoint
-const handleCsvImportRequest = (req: any, res: any) => {
+const handleCsvImportRequest = async (req: any, res: any) => {
   try {
     const csvContent = req.body.csvContent || req.body.csvString;
     const actorUid = req.body.actorUid || req.body.actorId || req.body.actorName || 'ADMIN';
@@ -267,7 +294,11 @@ const handleCsvImportRequest = (req: any, res: any) => {
     for (const row of validRows) {
       try {
         if (row.action === 'CREATE') {
-          dataStore.createUser({
+          const firestoreUser = isFirestoreReady() ? await getUserByEmailFromFirestore(row.email) : null;
+          if (firestoreUser || (!isFirestoreReady() && dataStore.getUserByEmail(row.email))) {
+            throw new Error(`Email "${row.email}" đã tồn tại trên hệ thống`);
+          }
+          const newUser = dataStore.createUser({
             email: row.email,
             displayName: row.displayName || row.email.split('@')[0],
             password: row.password || 'Student@123',
@@ -277,6 +308,10 @@ const handleCsvImportRequest = (req: any, res: any) => {
             phone: row.phone,
             createdBy: actorUid,
           });
+          if (isFirestoreReady() && !(await saveUserToFirestore(newUser))) {
+            dataStore.deleteUser(newUser.uid);
+            throw new Error('Không thể lưu tài khoản vào Firebase');
+          }
           createdCount++;
         } else if (row.action === 'UPDATE') {
           const user = dataStore.getUserByEmail(row.email);
