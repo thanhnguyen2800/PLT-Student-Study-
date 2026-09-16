@@ -86,6 +86,10 @@ export const GeminiChatbot: React.FC<{
         }),
       });
 
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error('API AI chưa được triển khai trên máy chủ. Hãy redeploy Vercel sau khi cấu hình GEMINI_API_KEY.');
+      }
       const json = await res.json();
       if (json.success && json.data?.reply) {
         setMessages(prev => [
