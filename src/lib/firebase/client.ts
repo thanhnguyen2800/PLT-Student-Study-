@@ -3,6 +3,7 @@ import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getDatabase, type Database } from 'firebase/database';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
+import appletConfig from '../../../firebase-applet-config.json';
 
 // Safe environment config extraction (supports Vite and Next.js env naming)
 const getEnv = (key: string, nextKey: string): string => {
@@ -14,13 +15,14 @@ const getEnv = (key: string, nextKey: string): string => {
 };
 
 const firebaseConfig = {
-  apiKey: getEnv('VITE_FIREBASE_API_KEY', 'NEXT_PUBLIC_FIREBASE_API_KEY'),
-  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN', 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN'),
-  projectId: getEnv('VITE_FIREBASE_PROJECT_ID', 'NEXT_PUBLIC_FIREBASE_PROJECT_ID'),
-  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET', 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'),
-  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID', 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID'),
-  appId: getEnv('VITE_FIREBASE_APP_ID', 'NEXT_PUBLIC_FIREBASE_APP_ID'),
+  apiKey: getEnv('VITE_FIREBASE_API_KEY', 'NEXT_PUBLIC_FIREBASE_API_KEY') || appletConfig.apiKey,
+  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN', 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN') || appletConfig.authDomain,
+  projectId: getEnv('VITE_FIREBASE_PROJECT_ID', 'NEXT_PUBLIC_FIREBASE_PROJECT_ID') || appletConfig.projectId,
+  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET', 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET') || appletConfig.storageBucket,
+  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID', 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') || appletConfig.messagingSenderId,
+  appId: getEnv('VITE_FIREBASE_APP_ID', 'NEXT_PUBLIC_FIREBASE_APP_ID') || appletConfig.appId,
   databaseURL: getEnv('VITE_FIREBASE_DATABASE_URL', 'NEXT_PUBLIC_FIREBASE_DATABASE_URL'),
+  firestoreDatabaseId: appletConfig.firestoreDatabaseId,
 };
 
 export const isFirebaseConfigured = (): boolean => {
@@ -56,7 +58,9 @@ export const getClientFirestore = (): Firestore | null => {
   const firebaseApp = getFirebaseApp();
   if (!firebaseApp) return null;
   if (!firestore) {
-    firestore = getFirestore(firebaseApp);
+    firestore = firebaseConfig.firestoreDatabaseId
+      ? getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId)
+      : getFirestore(firebaseApp);
   }
   return firestore;
 };

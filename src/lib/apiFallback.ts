@@ -1,4 +1,38 @@
 import { dataStore } from './db/store';
+import { getClientFirestore, isFirebaseConfigured } from './firebase/client';
+import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+import { Quiz } from '../types';
+
+function removeUndefined(value: any): any {
+  if (Array.isArray(value)) return value.map(removeUndefined);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value)
+      .filter(([, item]) => item !== undefined)
+      .map(([key, item]) => [key, removeUndefined(item)]));
+  }
+  return value;
+}
+
+async function getFirebaseQuizzes(): Promise<Quiz[]> {
+  const db = getClientFirestore();
+  if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
+  const snapshot = await getDocs(collection(db, 'quizzes'));
+  return snapshot.docs.map(item => item.data() as Quiz).filter(quiz => Boolean(quiz.id));
+}
+
+async function getFirebaseQuiz(id: string): Promise<Quiz | null> {
+  const db = getClientFirestore();
+  if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
+  const snapshot = await getDoc(doc(db, 'quizzes', id));
+  return snapshot.exists() ? snapshot.data() as Quiz : null;
+}
+
+async function saveFirebaseQuiz(quiz: Quiz): Promise<Quiz> {
+  const db = getClientFirestore();
+  if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
+  await setDoc(doc(db, 'quizzes', quiz.id), removeUndefined(quiz), { merge: true });
+  return quiz;
+}
 
 // Helper to create a fake JSON Response
 function makeJsonResponse(data: any, status = 200) {
@@ -74,13 +108,26 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
     const search = url.searchParams.get('search') || undefined;
     const visibility = url.searchParams.get('visibility') || undefined;
 
-    const quizzes = dataStore.listQuizzes({ category, difficulty, search, visibility });
-    return makeJsonResponse({ success: true, data: quizzes });
+    try {
+      const quizzes = isFirebaseConfigured()
+        ? await getFirebaseQuizzes()
+        : dataStore.listQuizzes({ category, difficulty, search, visibility });
+      const filtered = quizzes.filter(quiz =>
+        (!category || quiz.category === category) &&
+        (!difficulty || quiz.difficulty === difficulty) &&
+        (!visibility || quiz.visibility === visibility) &&
+        (!search || `${quiz.title} ${quiz.description} ${quiz.tags.join(' ')}`.toLowerCase().includes(search.toLowerCase()))
+      ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      return makeJsonResponse({ success: true, data: filtered });
+    } catch (error: any) {
+      return makeJsonResponse({ success: false, error: { message: error.message || 'Không thể đọc dữ liệu Firebase' } }, 500);
+    }
   }
 
   if (path === '/api/quizzes' && method === 'POST') {
     try {
       const quiz = dataStore.createQuiz(body);
+      if (isFirebaseConfigured()) await saveFirebaseQuiz(quiz);
       return makeJsonResponse({ success: true, data: quiz }, 201);
     } catch (e: any) {
       return makeJsonResponse({ success: false, error: { message: e.message } }, 400);
@@ -99,7 +146,7 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
 
   if (path.startsWith('/api/quizzes/') && method === 'GET') {
     const id = path.split('/')[3];
-    const quiz = dataStore.getQuizById(id);
+    const quiz = isFirebaseConfigured() ? await getFirebaseQuiz(id) : dataStore.getQuizById(id);
     if (!quiz) {
       return makeJsonResponse({ success: false, error: { message: 'Quiz not found' } }, 404);
     }
@@ -109,7 +156,11 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
   if (path.startsWith('/api/quizzes/') && (method === 'PUT' || method === 'PATCH')) {
     const id = path.split('/')[3];
     try {
-      const updated = dataStore.updateQuiz(id, body);
+      const current = isFirebaseConfigured() ? await getFirebaseQuiz(id) : dataStore.getQuizById(id);
+      if (!current) return makeJsonResponse({ success: false, error: { message: 'Quiz not found' } }, 404);
+      const updated = { ...current, ...body, id, updatedAt: new Date().toISOString(), questionCount: body.questions?.length ?? current.questionCount } as Quiz;
+      if (isFirebaseConfigured()) await saveFirebaseQuiz(updated);
+      else dataStore.updateQuiz(id, body);
       return makeJsonResponse({ success: true, data: updated });
     } catch (e: any) {
       return makeJsonResponse({ success: false, error: { message: e.message } }, 400);
@@ -118,7 +169,13 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
 
   if (path.startsWith('/api/quizzes/') && method === 'DELETE') {
     const id = path.split('/')[3];
-    dataStore.deleteQuiz(id);
+    if (isFirebaseConfigured()) {
+      const db = getClientFirestore();
+      if (!db) return makeJsonResponse({ success: false, error: { message: 'Firebase chưa được cấu hình' } }, 500);
+      await deleteDoc(doc(db, 'quizzes', id));
+    } else {
+      dataStore.deleteQuiz(id);
+    }
     return makeJsonResponse({ success: true });
   }
 
