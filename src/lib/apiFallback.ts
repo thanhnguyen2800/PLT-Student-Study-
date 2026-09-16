@@ -1,7 +1,7 @@
 import { dataStore } from './db/store';
 import { getClientFirestore, isFirebaseConfigured } from './firebase/client';
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
-import { Quiz } from '../types';
+import { GameSession, Player, Quiz } from '../types';
 
 function removeUndefined(value: any): any {
   if (Array.isArray(value)) return value.map(removeUndefined);
@@ -32,6 +32,24 @@ async function saveFirebaseQuiz(quiz: Quiz): Promise<Quiz> {
   if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
   await setDoc(doc(db, 'quizzes', quiz.id), removeUndefined(quiz), { merge: true });
   return quiz;
+}
+
+async function getFirebaseGameSession(id: string): Promise<GameSession | null> {
+  const db = getClientFirestore();
+  if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
+  const snapshot = await getDoc(doc(db, 'gameSessions', id));
+  return snapshot.exists() ? snapshot.data() as GameSession : null;
+}
+
+async function saveFirebaseGameSession(session: GameSession): Promise<GameSession> {
+  const db = getClientFirestore();
+  if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
+  await setDoc(doc(db, 'gameSessions', session.id), removeUndefined({
+    ...session,
+    pin: session.pin || session.id,
+    updatedAt: new Date().toISOString(),
+  }), { merge: true });
+  return session;
 }
 
 // Helper to create a fake JSON Response
@@ -244,6 +262,34 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
         uid: body.hostId || body.host?.uid || 'host_teacher',
         displayName: body.hostName || body.host?.displayName || 'ThS. Trần Văn Minh',
       };
+      if (isFirebaseConfigured()) {
+        const quiz = await getFirebaseQuiz(body.quizId);
+        if (!quiz || !quiz.questions?.length) {
+          return makeJsonResponse({ success: false, error: { message: 'Quiz không tồn tại hoặc chưa có câu hỏi để tạo phòng' } }, 400);
+        }
+        const pin = Math.floor(100000 + Math.random() * 900000).toString();
+        const now = new Date().toISOString();
+        const session: GameSession = {
+          id: pin,
+          pin,
+          quizId: quiz.id,
+          quizTitle: quiz.title,
+          hostId: hostData.uid,
+          hostName: hostData.displayName,
+          status: 'WAITING',
+          currentQuestionIndex: 0,
+          totalQuestions: quiz.questions.length,
+          players: [],
+          answers: {},
+          createdAt: now,
+          updatedAt: now,
+          isExpired: false,
+          questions: quiz.questions,
+          currentQuestion: quiz.questions[0],
+        };
+        await saveFirebaseGameSession(session);
+        return makeJsonResponse({ success: true, data: { session, quiz }, session, quiz }, 201);
+      }
       const res = dataStore.createGameRoom(body.quizId, hostData);
       return makeJsonResponse({
         success: true,
@@ -264,6 +310,27 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
       const pin = body.pin || '';
       const playerName = body.name || body.playerName || body.player?.name || 'Thí sinh';
       const playerAvatar = body.avatar || body.playerAvatar || body.player?.avatar;
+      if (isFirebaseConfigured()) {
+        const session = await getFirebaseGameSession(String(pin).trim());
+        if (!session || session.isExpired || session.status !== 'WAITING') {
+          return makeJsonResponse({ success: false, error: { message: 'Mã PIN không tồn tại hoặc phòng thi đã kết thúc / hết hiệu lực' } }, 400);
+        }
+        const cleanName = String(playerName).trim() || 'Thí sinh';
+        const player: Player = {
+          id: 'p_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+          name: cleanName,
+          avatar: playerAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120',
+          score: 0,
+          streak: 0,
+        };
+        const players = [...(session.players || [])];
+        const existingIndex = players.findIndex(item => item.name.trim().toLowerCase() === cleanName.toLowerCase());
+        if (existingIndex >= 0) players[existingIndex] = player;
+        else players.push(player);
+        const updatedSession = await saveFirebaseGameSession({ ...session, players });
+        const quiz = await getFirebaseQuiz(updatedSession.quizId);
+        return makeJsonResponse({ success: true, data: { session: updatedSession, player, quiz }, session: updatedSession, player, quiz });
+      }
       const res = dataStore.joinGameRoom(pin, { name: playerName, avatar: playerAvatar });
       const quiz = dataStore.getQuizById(res.session.quizId) || (res.session.questions ? {
         id: res.session.quizId,
@@ -303,6 +370,17 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
   if (path.startsWith('/api/game/') && path.endsWith('/start') && method === 'POST') {
     const id = path.split('/')[3];
     try {
+      if (isFirebaseConfigured()) {
+        const session = await getFirebaseGameSession(id);
+        if (!session || session.isExpired) throw new Error('Không tìm thấy phòng thi đấu hoặc phòng đã hết hiệu lực');
+        const updated = await saveFirebaseGameSession({
+          ...session,
+          status: 'QUESTION_ACTIVE',
+          currentQuestionIndex: 0,
+          currentQuestion: session.questions?.[0] || session.currentQuestion,
+        });
+        return makeJsonResponse({ success: true, data: updated, session: updated });
+      }
       const session = dataStore.startGameRoom(id);
       return makeJsonResponse({ success: true, data: session, session });
     } catch (err: any) {
@@ -313,6 +391,29 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
   if (path.startsWith('/api/game/') && path.endsWith('/answer') && method === 'POST') {
     const id = path.split('/')[3];
     try {
+      if (isFirebaseConfigured()) {
+        const session = await getFirebaseGameSession(id);
+        const question = session?.questions?.[session.currentQuestionIndex] || session?.currentQuestion;
+        if (!session || !question) throw new Error('Không tìm thấy câu hỏi hiện tại');
+        const player = session.players.find(item => item.id === body.playerId);
+        if (!player) throw new Error('Không tìm thấy người chơi trong phòng');
+        const answerKey = question.id || `q_${session.currentQuestionIndex}`;
+        const answers = { ...(session.answers || {}) };
+        const questionAnswers = { ...(answers[answerKey] || {}) };
+        if (!questionAnswers[player.id]) {
+          const answer = body.answer ?? body.answerIndex;
+          const isCorrect = Array.isArray(question.correctAnswer)
+            ? Array.isArray(answer) && question.correctAnswer.length === answer.length && question.correctAnswer.every(value => answer.includes(value))
+            : Number(question.correctAnswer) === Number(answer);
+          const points = isCorrect ? question.points || 1000 : 0;
+          if (isCorrect) player.score = (player.score || 0) + points;
+          questionAnswers[player.id] = { answer, isCorrect, pointsEarned: points, score: points, answeredAt: Date.now() };
+        }
+        answers[answerKey] = questionAnswers;
+        const updated = await saveFirebaseGameSession({ ...session, players: [...session.players], answers });
+        const result = questionAnswers[player.id];
+        return makeJsonResponse({ success: true, data: { isCorrect: result.isCorrect, points: result.pointsEarned || result.score || 0, session: updated } });
+      }
       const res = dataStore.submitRoomAnswer(id, body.playerId, body.answer, body.timeSpent || 0);
       return makeJsonResponse({ success: true, data: res });
     } catch (err: any) {
@@ -323,6 +424,20 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
   if (path.startsWith('/api/game/') && path.endsWith('/next') && method === 'POST') {
     const id = path.split('/')[3];
     try {
+      if (isFirebaseConfigured()) {
+        const session = await getFirebaseGameSession(id);
+        if (!session) throw new Error('Không tìm thấy phòng thi đấu');
+        const nextIndex = session.currentQuestionIndex + 1;
+        const finished = nextIndex >= session.totalQuestions;
+        const updated = await saveFirebaseGameSession({
+          ...session,
+          status: finished ? 'FINISHED' : session.status === 'QUESTION_ACTIVE' ? 'LEADERBOARD' : 'QUESTION_ACTIVE',
+          currentQuestionIndex: finished ? session.currentQuestionIndex : nextIndex,
+          currentQuestion: finished ? undefined : session.questions?.[nextIndex],
+          isExpired: finished,
+        });
+        return makeJsonResponse({ success: true, data: updated, session: updated });
+      }
       const session = dataStore.nextRoomQuestion(id);
       return makeJsonResponse({ success: true, data: session, session });
     } catch (err: any) {
@@ -333,6 +448,12 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
   if (path.startsWith('/api/game/') && path.endsWith('/end') && method === 'POST') {
     const id = path.split('/')[3];
     try {
+      if (isFirebaseConfigured()) {
+        const session = await getFirebaseGameSession(id);
+        if (!session) return makeJsonResponse({ success: true, data: null, session: null });
+        const updated = await saveFirebaseGameSession({ ...session, status: 'FINISHED', isExpired: true });
+        return makeJsonResponse({ success: true, data: updated, session: updated });
+      }
       const session = dataStore.endOrExpireGameRoom(id);
       return makeJsonResponse({ success: true, data: session, session });
     } catch (err: any) {
@@ -342,6 +463,18 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
 
   if (path.startsWith('/api/game/') && method === 'GET') {
     const id = path.split('/')[3];
+    if (isFirebaseConfigured()) {
+      const session = await getFirebaseGameSession(id);
+      if (!session) {
+        return makeJsonResponse({ success: false, error: { message: 'Phòng thi không tồn tại' } }, 404);
+      }
+      const quiz = await getFirebaseQuiz(session.quizId);
+      return makeJsonResponse({
+        success: true,
+        data: { ...session, quiz, questions: session.questions || quiz?.questions, currentQuestion: session.currentQuestion || quiz?.questions?.[session.currentQuestionIndex] },
+        session,
+      });
+    }
     const session = dataStore.getGameRoom(id);
     if (!session) {
       return makeJsonResponse({ success: false, error: { message: 'Phòng thi không tồn tại' } }, 404);
