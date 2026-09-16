@@ -1,5 +1,4 @@
 import { dataStore } from './db/store';
-import { INITIAL_USERS } from './db/initialData';
 import { getClientFirestore, isFirebaseConfigured } from './firebase/client';
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import { GameSession, Player, Quiz, UserProfile, UserRole } from '../types';
@@ -299,10 +298,7 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
     if (isFirebaseConfigured()) {
       try {
         const cloudUsers = await getFirebaseUsers();
-        const usersById = new Map<string, UserProfile>();
-        INITIAL_USERS.forEach(user => usersById.set(user.uid, user));
-        cloudUsers.forEach(user => usersById.set(user.uid, user));
-        let users = Array.from(usersById.values());
+        let users = cloudUsers;
         const queryText = search?.toLowerCase() || '';
         users = users.filter(user =>
           (!queryText || user.displayName.toLowerCase().includes(queryText) || user.email.toLowerCase().includes(queryText) || (user.department || '').toLowerCase().includes(queryText)) &&
