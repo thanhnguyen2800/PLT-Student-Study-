@@ -137,6 +137,7 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
       status: 'PUBLISHED',
       ownerId: currentUser?.uid || 'user-teacher-01',
       ownerName: currentUser?.displayName || 'ThS. Trần Văn Minh',
+      creatorRole: currentUser?.role,
       questions,
     };
 
@@ -163,6 +164,30 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
   };
 
   const activeQ = questions[activeQuestionIndex] || questions[0];
+
+  const canManage = currentUser && ['SUPER_ADMIN', 'ADMIN', 'TEACHER'].includes(currentUser.role);
+
+  if (!canManage) {
+    return (
+      <div className="max-w-md mx-auto py-16 text-center space-y-4">
+        <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto shadow-sm">
+          <Award className="w-7 h-7" />
+        </div>
+        <h3 className="text-xl font-black text-slate-900 dark:text-white">
+          Quyền Hạn Tạo & Chỉnh Sửa Bộ Câu Hỏi
+        </h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+          Chỉ Quản trị viên, Quản lý và Giảng viên mới có quyền tạo và chỉnh sửa các bộ câu hỏi / đề thi Quiz cho học viên.
+        </p>
+        <button
+          onClick={onBack}
+          className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md cursor-pointer transition-transform active:scale-95"
+        >
+          Quay lại danh sách
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in pb-12">

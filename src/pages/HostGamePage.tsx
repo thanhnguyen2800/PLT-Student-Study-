@@ -39,8 +39,11 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
   const [initError, setInitError] = useState<string | null>(null);
   const pollingRef = useRef<any>(null);
 
+  const canHost = currentUser && ['SUPER_ADMIN', 'ADMIN', 'TEACHER'].includes(currentUser.role);
+
   // Initialize Game Session
   useEffect(() => {
+    if (!canHost) return;
     setInitError(null);
     fetch('/api/game/create', {
       method: 'POST',
@@ -49,6 +52,7 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
         quizId,
         hostId: currentUser?.uid || 'host_teacher',
         hostName: currentUser?.displayName || 'ThS. Trần Văn Minh',
+        hostRole: currentUser?.role,
       }),
     })
       .then(res => res.json())
@@ -67,7 +71,7 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
       });
 
     return () => clearInterval(pollingRef.current);
-  }, [quizId, currentUser]);
+  }, [quizId, currentUser, canHost]);
 
   // Firestore Realtime listener for zero-latency multiplayer updates
   useEffect(() => {
@@ -183,6 +187,28 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
     }, 1000);
     return () => clearInterval(interval);
   }, [session?.status, session?.currentQuestionIndex]);
+
+  if (!canHost) {
+    return (
+      <div className="max-w-md mx-auto py-16 text-center space-y-4">
+        <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto shadow-sm">
+          <AlertCircle className="w-7 h-7" />
+        </div>
+        <h3 className="text-xl font-black text-slate-900 dark:text-white">
+          Quyền Hạn Host Phòng Thi
+        </h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+          Chỉ Quản trị viên, Quản lý và Giảng viên mới có quyền tạo và điều hành phòng thi trực tuyến. Thí sinh và người dùng chưa đăng nhập vui lòng tham gia bằng mã PIN.
+        </p>
+        <button
+          onClick={onBack}
+          className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md cursor-pointer transition-transform active:scale-95"
+        >
+          Quay lại kho Quiz
+        </button>
+      </div>
+    );
+  }
 
   if (initError) {
     return (

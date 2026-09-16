@@ -408,6 +408,13 @@ app.get('/api/quizzes/:id', (req, res) => {
 
 app.post('/api/quizzes', (req, res) => {
   try {
+    const creatorRole = req.body.creatorRole || req.body.role;
+    if (creatorRole && !['SUPER_ADMIN', 'ADMIN', 'TEACHER'].includes(creatorRole)) {
+      return res.status(403).json({
+        success: false,
+        error: { message: 'Chỉ Giảng viên, Quản lý và Quản trị viên mới có quyền tạo bộ câu hỏi' },
+      });
+    }
     const newQuiz = dataStore.createQuiz(req.body);
     saveQuizToFirestore(newQuiz).catch(e => console.warn('[Firestore] Async save quiz failed:', e));
     res.status(201).json({ success: true, data: newQuiz });
@@ -496,7 +503,15 @@ app.get('/api/firebase/status', (req, res) => {
 // 1. Create Room (Multiplayer Live Session)
 const handleCreateGame = async (req: express.Request, res: express.Response) => {
   try {
-    const { quizId, hostId, hostName, host } = req.body;
+    const { quizId, hostId, hostName, host, hostRole, role } = req.body;
+    const userRole = hostRole || role;
+    if (userRole && !['SUPER_ADMIN', 'ADMIN', 'TEACHER'].includes(userRole)) {
+      return res.status(403).json({
+        success: false,
+        error: { message: 'Chỉ Giảng viên, Quản lý và Quản trị viên mới có quyền tạo và host phòng thi đấu' },
+      });
+    }
+
     if (!quizId) {
       return res.status(400).json({ success: false, error: { message: 'Vui lòng chọn Quiz để tạo phòng thi đấu' } });
     }

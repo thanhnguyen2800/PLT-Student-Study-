@@ -12,7 +12,9 @@ import {
   BookOpen, 
   Database,
   HelpCircle,
-  AlertCircle
+  AlertCircle,
+  Lock,
+  ShieldAlert
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -24,6 +26,7 @@ interface PlayerGameProps {
   initialPin?: string;
   onBack: () => void;
   onHostQuiz?: (quizId: string) => void;
+  onRequireLogin?: () => void;
 }
 
 const AVATARS = [
@@ -34,7 +37,12 @@ const AVATARS = [
   'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=120',
 ];
 
-export const PlayerGamePage: React.FC<PlayerGameProps> = ({ initialPin = '', onBack, onHostQuiz }) => {
+export const PlayerGamePage: React.FC<PlayerGameProps> = ({ 
+  initialPin = '', 
+  onBack, 
+  onHostQuiz,
+  onRequireLogin
+}) => {
   const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'join' | 'create'>('join');
   const [pin, setPin] = useState(initialPin);
@@ -370,72 +378,127 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({ initialPin = '', onB
         {/* TAB 2: CREATE GAME ROOM (HOST LIVE) */}
         {activeTab === 'create' && (
           <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div>
-                <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <PlusCircle className="w-5 h-5 text-indigo-600" />
-                  Tạo Phòng Thi Đấu Mới
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Chọn đề Quiz từ kho dữ liệu để mở phòng thi đấu multiplayer realtime
-                </p>
+            {!currentUser ? (
+              <div className="py-8 text-center space-y-4 max-w-md mx-auto animate-in fade-in">
+                <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto shadow-sm">
+                  <Lock className="w-7 h-7" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                    Quyền Hạn Tạo Phòng Thi (Host)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
+                    Bạn đang ở chế độ <strong>Khách chưa đăng nhập</strong>. Khách chỉ có quyền tham gia vào phòng thi trực tiếp bằng mã Game PIN. Để mở phòng thi và làm Host cho lớp học, vui lòng đăng nhập bằng tài khoản Giảng viên hoặc Quản lý.
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+                  <button
+                    onClick={() => setActiveTab('join')}
+                    className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    Quay lại nhập mã PIN
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (onRequireLogin) onRequireLogin();
+                      else onBack();
+                    }}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-all hover:scale-102 cursor-pointer"
+                  >
+                    Đăng nhập Giảng viên
+                  </button>
+                </div>
               </div>
-            </div>
-
-            {availableQuizzes.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 text-xs">
-                <BookOpen className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                <p>Đang tải danh sách Quiz...</p>
+            ) : !['SUPER_ADMIN', 'ADMIN', 'TEACHER'].includes(currentUser.role) ? (
+              <div className="py-8 text-center space-y-4 max-w-md mx-auto animate-in fade-in">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto shadow-sm">
+                  <ShieldAlert className="w-7 h-7" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                    Dành Cho Giảng Viên & Quản Lý
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
+                    Tài khoản Học viên chỉ có quyền tham gia vào các phòng thi trực tuyến do Giảng viên tổ chức. Quyền tạo phòng và làm Host thuộc về Giảng viên và Quản lý.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setActiveTab('join')}
+                  className="py-2.5 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+                >
+                  Tham gia phòng thi bằng mã PIN
+                </button>
               </div>
             ) : (
-              <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-                {availableQuizzes.map(quizItem => (
-                  <div
-                    key={quizItem.id}
-                    className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 hover:border-indigo-500/50 transition-all flex items-center justify-between gap-4"
-                  >
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold">
-                          {quizItem.category || 'Quiz'}
-                        </span>
-                        <span className="text-[11px] text-slate-400 font-medium">
-                          {quizItem.questions?.length || 0} câu hỏi
-                        </span>
-                      </div>
-                      <h4 className="font-bold text-xs text-slate-900 dark:text-white truncate">
-                        {quizItem.title}
-                      </h4>
-                      <p className="text-[11px] text-slate-400 truncate">
-                        {quizItem.description || 'Đề thi trắc nghiệm học tập'}
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        if (onHostQuiz) {
-                          onHostQuiz(quizItem.id);
-                        }
-                      }}
-                      className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shrink-0 flex items-center gap-1.5 shadow-xs transition-transform active:scale-95 cursor-pointer"
-                    >
-                      <Radio className="w-3.5 h-3.5" />
-                      <span>Mở phòng thi</span>
-                    </button>
+              <>
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                      <PlusCircle className="w-5 h-5 text-indigo-600" />
+                      Tạo Phòng Thi Đấu Mới
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Chọn đề Quiz từ kho dữ liệu để mở phòng thi đấu multiplayer realtime
+                    </p>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
 
-            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-xs space-y-1">
-              <p className="font-bold flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                Chế độ Host Giảng Viên:
-              </p>
-              <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 leading-relaxed">
-                Sau khi mở phòng thi, hệ thống sẽ cấp mã PIN 6 số và tự động đồng bộ thời gian thực lên Cloud Firestore để các thí sinh vào cùng tranh tài. Khi Host kết thúc hoặc đóng phòng, mã PIN sẽ hết hiệu lực ngay lập tức.
-              </p>
-            </div>
+                {availableQuizzes.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 text-xs">
+                    <BookOpen className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                    <p>Đang tải danh sách Quiz...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                    {availableQuizzes.map(quizItem => (
+                      <div
+                        key={quizItem.id}
+                        className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 hover:border-indigo-500/50 transition-all flex items-center justify-between gap-4"
+                      >
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold">
+                              {quizItem.category || 'Quiz'}
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-medium">
+                              {quizItem.questions?.length || 0} câu hỏi
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                            {quizItem.title}
+                          </h4>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {quizItem.description || 'Đề thi trắc nghiệm học tập'}
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            if (onHostQuiz) {
+                              onHostQuiz(quizItem.id);
+                            }
+                          }}
+                          className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shrink-0 flex items-center gap-1.5 shadow-xs transition-transform active:scale-95 cursor-pointer"
+                        >
+                          <Radio className="w-3.5 h-3.5" />
+                          <span>Mở phòng thi</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-xs space-y-1">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                    Chế độ Host Giảng Viên:
+                  </p>
+                  <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 leading-relaxed">
+                    Sau khi mở phòng thi, hệ thống sẽ cấp mã PIN 6 số và tự động đồng bộ thời gian thực lên Cloud Firestore để các thí sinh vào cùng tranh tài. Khi Host kết thúc hoặc đóng phòng, mã PIN sẽ hết hiệu lực ngay lập tức.
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

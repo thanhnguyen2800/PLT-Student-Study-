@@ -12,7 +12,10 @@ import {
   Layers, 
   FileJson,
   Upload,
-  Sparkles
+  Sparkles,
+  Lock,
+  ShieldAlert,
+  GraduationCap
 } from 'lucide-react';
 import { Quiz } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -21,6 +24,9 @@ import { DifficultyBadge } from '../components/common/Badge';
 interface QuizzesPageProps {
   onNavigate: (tab: string, extraId?: string) => void;
 }
+
+// 3 Default / Pre-installed quizzes available for guest preview
+const DEFAULT_QUIZ_IDS = ['quiz-web-dev-01', 'quiz-science-ai-02', 'quiz-english-comm-03'];
 
 export const QuizzesPage: React.FC<QuizzesPageProps> = ({ onNavigate }) => {
   const { currentUser, canAccess } = useAuth();
@@ -84,7 +90,18 @@ export const QuizzesPage: React.FC<QuizzesPageProps> = ({ onNavigate }) => {
 
   const categories = ['ALL', 'Công nghệ thông tin', 'Khoa học & Trí tuệ nhân tạo', 'Ngoại ngữ'];
 
-  const filteredQuizzes = quizzes.filter(q => {
+  const isGuest = !currentUser;
+  const canManage = canAccess(['TEACHER', 'ADMIN', 'SUPER_ADMIN']);
+
+  // Unauthenticated users (guests) can only view the 3 default quizzes
+  // Authenticated students and teachers/admins see all quizzes
+  const userVisibleQuizzes = isGuest
+    ? quizzes.filter(q => DEFAULT_QUIZ_IDS.includes(q.id))
+    : quizzes;
+
+  const newQuizzesCount = quizzes.filter(q => !DEFAULT_QUIZ_IDS.includes(q.id)).length;
+
+  const filteredQuizzes = userVisibleQuizzes.filter(q => {
     const matchSearch = q.title.toLowerCase().includes(search.toLowerCase()) ||
       q.description.toLowerCase().includes(search.toLowerCase()) ||
       q.tags.some(t => t.toLowerCase().includes(search.toLowerCase()));
@@ -92,8 +109,6 @@ export const QuizzesPage: React.FC<QuizzesPageProps> = ({ onNavigate }) => {
     const matchDiff = difficultyFilter === 'ALL' || q.difficulty === difficultyFilter;
     return matchSearch && matchCat && matchDiff;
   });
-
-  const canManage = canAccess(['TEACHER', 'ADMIN', 'SUPER_ADMIN']);
 
   return (
     <div className="space-y-6 animate-in fade-in">
@@ -111,7 +126,7 @@ export const QuizzesPage: React.FC<QuizzesPageProps> = ({ onNavigate }) => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => onNavigate('create-quiz')}
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center gap-2 shadow-sm transition-colors"
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               Tạo Quiz Mới
@@ -119,6 +134,31 @@ export const QuizzesPage: React.FC<QuizzesPageProps> = ({ onNavigate }) => {
           </div>
         )}
       </div>
+
+      {/* Guest Notice Banner */}
+      {isGuest && (
+        <div className="p-4 rounded-2xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200 shadow-xs">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/60 flex items-center justify-center shrink-0 text-amber-700 dark:text-amber-300">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-sm text-slate-900 dark:text-white">
+                Chế độ trải nghiệm dành cho Khách (Chưa đăng nhập)
+              </p>
+              <p className="text-slate-600 dark:text-slate-300 text-xs mt-0.5">
+                Bạn đang trải nghiệm 3 bộ Quiz có sẵn của hệ thống. Đăng nhập tài khoản Học viên do nhà trường cấp để mở khóa {newQuizzesCount > 0 ? `${newQuizzesCount} bộ câu hỏi mới nhất` : 'toàn bộ kho học liệu'}!
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('login')}
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shrink-0 shadow-xs transition-colors cursor-pointer"
+          >
+            Đăng nhập ngay
+          </button>
+        </div>
+      )}
 
       {/* Filters Bar */}
       <div className="flex flex-col md:flex-row gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
@@ -237,16 +277,15 @@ export const QuizzesPage: React.FC<QuizzesPageProps> = ({ onNavigate }) => {
                     Flashcard
                   </button>
 
-                  <button
-                    onClick={() => onNavigate('host', quiz.id)}
-                    title="Tổ chức thi đấu Kahoot Live"
-                    className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 text-amber-700 dark:text-amber-300 text-xs font-semibold border border-amber-200 dark:border-amber-800 transition-colors"
-                  >
-                    <Radio className="w-4 h-4" />
-                  </button>
-
                   {canManage && (
                     <>
+                      <button
+                        onClick={() => onNavigate('host', quiz.id)}
+                        title="Tổ chức thi đấu Kahoot Live"
+                        className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 text-amber-700 dark:text-amber-300 text-xs font-semibold border border-amber-200 dark:border-amber-800 transition-colors"
+                      >
+                        <Radio className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => handleDuplicate(quiz.id)}
                         title="Nhân bản Quiz"
@@ -275,6 +314,32 @@ export const QuizzesPage: React.FC<QuizzesPageProps> = ({ onNavigate }) => {
 
             </div>
           ))}
+
+          {/* Locked Teaser Card for Guests */}
+          {isGuest && newQuizzesCount > 0 && (
+            <div className="bg-linear-to-b from-slate-50 to-indigo-50/30 dark:from-slate-900/60 dark:to-indigo-950/20 rounded-2xl border-2 border-dashed border-indigo-200 dark:border-indigo-900/50 p-6 flex flex-col items-center justify-center text-center space-y-3 min-h-[320px]">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-xs">
+                <Lock className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 uppercase">
+                  Dành riêng cho Học viên
+                </span>
+                <h4 className="font-extrabold text-base text-slate-900 dark:text-white mt-1">
+                  +{newQuizzesCount} Bộ Đề & Quiz Mới
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xs leading-relaxed">
+                  Các bộ câu hỏi mới do Giảng viên cập nhật chỉ hiển thị cho Học viên đã đăng nhập tài khoản.
+                </p>
+              </div>
+              <button
+                onClick={() => onNavigate('login')}
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-all hover:scale-105 cursor-pointer"
+              >
+                Đăng nhập tài khoản Học viên
+              </button>
+            </div>
+          )}
         </div>
       )}
 

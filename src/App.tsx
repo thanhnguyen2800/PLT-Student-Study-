@@ -115,11 +115,12 @@ function MainApp() {
               setSelectedQuizId(quizId);
               setCurrentTab('host');
             }}
+            onRequireLogin={() => setCurrentTab('login')}
           />
         )}
 
         {currentTab === 'minigames' && (
-          <MiniGamesPage />
+          <MiniGamesPage onNavigate={handleNavigate} />
         )}
 
         {currentTab === 'admin' && (
