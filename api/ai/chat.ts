@@ -70,9 +70,16 @@ export default async function handler(req: any, res: any) {
     });
   } catch (error: any) {
     console.error('[AI Chat] Gemini request failed:', error);
+    const errorMessage = String(error?.message || 'Không thể kết nối Gemini.');
+    const isLeakedKey = /reported as leaked|reported.*leak|api key.*leak|invalid api key/i.test(errorMessage);
     return res.status(500).json({
       success: false,
-      error: { code: 'AI_CHAT_ERROR', message: error.message || 'Không thể kết nối Gemini.' },
+      error: {
+        code: isLeakedKey ? 'GEMINI_API_KEY_LEAKED' : 'AI_CHAT_ERROR',
+        message: isLeakedKey
+          ? 'Gemini API key đã bị Google vô hiệu hóa vì bị phát hiện công khai. Hãy tạo key mới trên Google AI Studio, cập nhật GEMINI_API_KEY trên Vercel và redeploy.'
+          : errorMessage,
+      },
     });
   }
 }
