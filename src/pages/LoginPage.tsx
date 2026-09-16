@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BookOpen, Lock, Mail, ShieldAlert, KeyRound, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { PltLogo } from '../components/common/PltLogo';
 
 export const LoginPage: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
   const { login } = useAuth();
@@ -33,10 +34,8 @@ export const LoginPage: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
       <div className="max-w-md w-full space-y-8 bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl transition-all">
         
         {/* Brand Header */}
-        <div className="text-center">
-          <div className="w-14 h-14 mx-auto rounded-2xl bg-linear-to-tr from-indigo-600 to-blue-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25 mb-4">
-            <BookOpen className="w-7 h-7" />
-          </div>
+        <div className="text-center flex flex-col items-center">
+          <PltLogo size="lg" className="mb-4" />
           <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             STUDENT STUDY
           </h2>

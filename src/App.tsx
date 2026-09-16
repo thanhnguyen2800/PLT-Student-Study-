@@ -157,13 +157,8 @@ function MainApp() {
 
       {/* Footer */}
       <footer className="mt-auto border-t border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xs py-6 text-center text-xs text-slate-500 dark:text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-7xl mx-auto px-4 flex items-center justify-center">
           <p>© {new Date().getFullYear()} STUDENT STUDY — Nền tảng học tập & ôn luyện kiến thức thế hệ mới.</p>
-          <div className="flex items-center gap-4 text-[11px]">
-            <span>Được hỗ trợ bởi Google Gemini AI</span>
-            <span>•</span>
-            <span className="text-emerald-600 font-semibold">Chính sách bảo mật RBAC kích hoạt</span>
-          </div>
         </div>
       </footer>
     </div>

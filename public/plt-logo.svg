@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 84" fill="none">
+  <style>
+    .plt-title {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-weight: 900;
+      font-size: 58px;
+      fill: #2B3A8C;
+      letter-spacing: -1.5px;
+    }
+    .plt-sub {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-weight: 800;
+      font-size: 11px;
+      fill: #2B3A8C;
+      letter-spacing: 4.8px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .dark-invert {
+        /* Keep brand crisp */
+      }
+    }
+  </style>
+  <text x="50%" y="54" text-anchor="middle" class="plt-title">PLT</text>
+  <text x="51%" y="76" text-anchor="middle" class="plt-sub">SOLUTIONS</text>
+</svg>

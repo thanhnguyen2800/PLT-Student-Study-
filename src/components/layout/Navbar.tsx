@@ -19,6 +19,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { RoleBadge } from '../common/Badge';
+import { PltLogo } from '../common/PltLogo';
 
 interface NavbarProps {
   currentTab: string;
@@ -48,18 +49,14 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openA
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         
         {/* Brand Logo */}
-        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCurrentTab('dashboard')}>
-          <div className="w-10 h-10 rounded-xl bg-linear-to-tr from-indigo-600 to-blue-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
-            <BookOpen className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-black text-lg tracking-tight bg-linear-to-r from-indigo-600 to-blue-600 dark:from-indigo-400 dark:to-blue-400 bg-clip-text text-transparent">
-                STUDENT STUDY
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 -mt-1 font-medium">EdTech Learning Platform</p>
-          </div>
+        <div 
+          className="flex items-center gap-2 sm:gap-3 cursor-pointer group shrink-0" 
+          onClick={() => setCurrentTab('dashboard')}
+        >
+          <PltLogo size="md" />
+          <span className="font-black text-base sm:text-lg tracking-tight bg-linear-to-r from-indigo-600 to-blue-600 dark:from-indigo-400 dark:to-blue-400 bg-clip-text text-transparent whitespace-nowrap">
+            STUDENT STUDY
+          </span>
         </div>
 
         {/* Desktop Navigation */}
