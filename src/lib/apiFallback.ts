@@ -586,13 +586,14 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
       if (isFirebaseConfigured()) {
         const session = await getFirebaseGameSession(id);
         if (!session) throw new Error('Không tìm thấy phòng thi đấu');
+        const showingLeaderboard = session.status === 'QUESTION_ACTIVE';
         const nextIndex = session.currentQuestionIndex + 1;
-        const finished = nextIndex >= session.totalQuestions;
+        const finished = !showingLeaderboard && nextIndex >= session.totalQuestions;
         const updated = await saveFirebaseGameSession({
           ...session,
-          status: finished ? 'FINISHED' : session.status === 'QUESTION_ACTIVE' ? 'LEADERBOARD' : 'QUESTION_ACTIVE',
-          currentQuestionIndex: finished ? session.currentQuestionIndex : nextIndex,
-          currentQuestion: finished ? undefined : session.questions?.[nextIndex],
+          status: finished ? 'FINISHED' : showingLeaderboard ? 'LEADERBOARD' : 'QUESTION_ACTIVE',
+          currentQuestionIndex: showingLeaderboard ? session.currentQuestionIndex : nextIndex,
+          currentQuestion: finished ? undefined : showingLeaderboard ? session.currentQuestion : session.questions?.[nextIndex],
           isExpired: finished,
         });
         return makeJsonResponse({ success: true, data: updated, session: updated });
