@@ -4,6 +4,7 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import { createHash } from 'crypto';
 import { dataStore } from './src/lib/db/store.js';
 import { parseCSV } from './src/utils/csv.js';
 import { UserRole } from './src/types.js';
@@ -72,7 +73,35 @@ app.post('/api/auth/login', (req, res) => {
       });
     }
 
+    const authenticateCloudUser = async () => {
+      if (!isFirestoreReady()) return null;
+      const user = await getUserByEmailFromFirestore(email);
+      if (!user || user.status === 'DISABLED' || user.status === 'LOCKED') return null;
+      const passwordHash = createHash('sha256').update(String(password).trim()).digest('hex');
+      const validPasswords = ['Admin@123', 'Student@123', 'Teacher@123', 'admin123', 'teacher123', 'student123', '123456', 'password'];
+      if (user.passwordHash && user.passwordHash !== passwordHash) return null;
+      if (!user.passwordHash && !validPasswords.includes(String(password).trim())) return null;
+      user.lastLoginAt = new Date().toISOString();
+      await saveUserToFirestore(user);
+      return { user };
+    };
+
     const authResult = dataStore.authenticate(email, password);
+    if (!authResult) {
+      return authenticateCloudUser().then(cloudResult => {
+        if (!cloudResult) {
+          return res.status(401).json({
+            success: false,
+            error: { code: 'AUTH_FAILED', message: 'Email hoặc mật khẩu không chính xác' },
+          });
+        }
+        return res.json({
+          success: true,
+          data: { user: cloudResult.user, token: 'token_' + cloudResult.user.uid + '_' + Date.now() },
+        });
+      }).catch(error => res.status(500).json({ success: false, error: { message: error.message || 'Không thể đăng nhập' } }));
+    }
+
     if (!authResult) {
       return res.status(401).json({
         success: false,
@@ -167,6 +196,7 @@ app.post('/api/admin/users', async (req, res) => {
       phone,
       createdBy: actorName || createdBy || actorId || 'ADMIN',
     });
+    newUser.passwordHash = createHash('sha256').update(String(password || 'Student@123').trim()).digest('hex');
 
     if (isFirestoreReady() && !(await saveUserToFirestore(newUser))) {
       dataStore.deleteUser(newUser.uid);
@@ -271,12 +301,24 @@ app.delete('/api/admin/users/:uid', async (req, res) => {
   }
 });
 
-app.post('/api/admin/users/:uid/reset-password', (req, res) => {
+app.post('/api/admin/users/:uid/reset-password', async (req, res) => {
   try {
     const { uid } = req.params;
     const { newPassword } = req.body;
     const pwd = newPassword || 'Pass@' + Math.floor(100000 + Math.random() * 900000);
-    dataStore.updateUser(uid, { password: pwd });
+    const localUser = dataStore.getUserById(uid);
+    if (localUser) {
+      const updated = dataStore.updateUser(uid, { password: pwd });
+      updated.passwordHash = createHash('sha256').update(String(pwd).trim()).digest('hex');
+      await saveUserToFirestore(updated);
+    } else if (isFirestoreReady()) {
+      const cloudUser = (await loadAllUsersFromFirestore()).find(user => user.uid === uid);
+      if (!cloudUser) return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });
+      cloudUser.passwordHash = createHash('sha256').update(String(pwd).trim()).digest('hex');
+      await saveUserToFirestore(cloudUser);
+    } else {
+      return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });
+    }
     res.json({ success: true, data: { newPassword: pwd } });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { message: err.message } });

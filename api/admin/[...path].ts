@@ -1,6 +1,7 @@
 import { dataStore } from '../../src/lib/db/store';
 import { parseCSV } from '../../src/utils/csv';
 import { UserRole } from '../../src/types';
+import { createHash } from 'crypto';
 import {
   getBackendFirestore,
   isFirestoreReady,
@@ -40,6 +41,7 @@ async function createUser(body: any, actorId?: string) {
     phone,
     createdBy: actorId || 'ADMIN',
   });
+  user.passwordHash = createHash('sha256').update(String(password || 'Student@123').trim()).digest('hex');
 
   if (isFirestoreReady() && !(await saveUserToFirestore(user))) {
     dataStore.deleteUser(user.uid);

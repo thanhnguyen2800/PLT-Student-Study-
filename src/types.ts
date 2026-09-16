@@ -14,6 +14,7 @@ export interface UserProfile {
   updatedAt: string;
   lastLoginAt?: string;
   createdBy?: string;
+  passwordHash?: string;
 }
 
 export type User = UserProfile;
