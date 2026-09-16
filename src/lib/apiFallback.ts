@@ -1,4 +1,5 @@
 import { dataStore } from './db/store';
+import { INITIAL_USERS } from './db/initialData';
 import { getClientFirestore, isFirebaseConfigured } from './firebase/client';
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import { GameSession, Player, Quiz, UserProfile, UserRole } from '../types';
@@ -44,6 +45,15 @@ async function getFirebaseUserByEmail(email: string): Promise<UserProfile | null
     .map(item => item.data() as UserProfile)
     .find(item => item.email?.toLowerCase().trim() === target);
   return user || null;
+}
+
+async function getFirebaseUsers(): Promise<UserProfile[]> {
+  const db = getClientFirestore();
+  if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
+  const snapshot = await getDocs(collection(db, 'users'));
+  return snapshot.docs
+    .map(item => item.data() as UserProfile)
+    .filter(user => Boolean(user.uid && user.email));
 }
 
 async function saveFirebaseUser(user: UserProfile): Promise<UserProfile> {
@@ -250,7 +260,26 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
     const search = url.searchParams.get('search') || undefined;
     const role = url.searchParams.get('role') || undefined;
     const status = url.searchParams.get('status') || undefined;
-    const result = dataStore.listUsers({ search, role, status });
+    let result = dataStore.listUsers({ search, role, status });
+    if (isFirebaseConfigured()) {
+      try {
+        const cloudUsers = await getFirebaseUsers();
+        const usersById = new Map<string, UserProfile>();
+        INITIAL_USERS.forEach(user => usersById.set(user.uid, user));
+        cloudUsers.forEach(user => usersById.set(user.uid, user));
+        let users = Array.from(usersById.values());
+        const queryText = search?.toLowerCase() || '';
+        users = users.filter(user =>
+          (!queryText || user.displayName.toLowerCase().includes(queryText) || user.email.toLowerCase().includes(queryText) || (user.department || '').toLowerCase().includes(queryText)) &&
+          (!role || role === 'ALL' || user.role === role) &&
+          (!status || status === 'ALL' || user.status === status)
+        );
+        users.sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+        result = { users, total: users.length, page: 1, totalPages: 1 };
+      } catch (error) {
+        console.warn('[Client API] Không thể đọc users từ Firestore, dùng dữ liệu cục bộ:', error);
+      }
+    }
     return makeJsonResponse({
       success: true,
       data: result.users,
