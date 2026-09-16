@@ -204,10 +204,42 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
 
   if (path === '/api/game/join' && method === 'POST') {
     try {
-      const res = dataStore.joinGameRoom(body.pin, { name: body.playerName, avatar: body.avatar });
-      return makeJsonResponse({ success: true, data: res });
+      const pin = body.pin || '';
+      const playerName = body.name || body.playerName || body.player?.name || 'Thí sinh';
+      const playerAvatar = body.avatar || body.playerAvatar || body.player?.avatar;
+      const res = dataStore.joinGameRoom(pin, { name: playerName, avatar: playerAvatar });
+      const quiz = dataStore.getQuizById(res.session.quizId) || (res.session.questions ? {
+        id: res.session.quizId,
+        title: res.session.quizTitle,
+        description: '',
+        ownerId: res.session.hostId,
+        ownerName: res.session.hostName,
+        category: 'Chung',
+        tags: [],
+        difficulty: 'MEDIUM',
+        coverImageUrl: '',
+        visibility: 'PUBLIC',
+        status: 'PUBLISHED',
+        playCount: 0,
+        questionCount: res.session.questions.length,
+        createdAt: res.session.createdAt,
+        updatedAt: res.session.updatedAt,
+        questions: res.session.questions,
+      } : null);
+
+      return makeJsonResponse({
+        success: true,
+        data: {
+          session: res.session,
+          player: res.player,
+          quiz: quiz,
+        },
+        session: res.session,
+        player: res.player,
+        quiz: quiz,
+      });
     } catch (err: any) {
-      return makeJsonResponse({ success: false, error: { message: err.message } }, 400);
+      return makeJsonResponse({ success: false, error: { message: err.message || 'Không thể tham gia phòng thi' } }, 400);
     }
   }
 

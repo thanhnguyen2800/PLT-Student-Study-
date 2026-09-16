@@ -16,7 +16,7 @@ import { LoginPage } from './pages/LoginPage';
 import { Sparkles } from 'lucide-react';
 
 function MainApp() {
-  const { currentUser } = useAuth();
+  const { currentUser, isLoading } = useAuth();
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [selectedQuizId, setSelectedQuizId] = useState<string>('quiz-tech-01');
   const [initialPin, setInitialPin] = useState<string>('');
@@ -32,6 +32,31 @@ function MainApp() {
     setCurrentTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-sm font-medium">Đang kiểm tra xác thực...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Yêu cầu đăng nhập bắt buộc: Người dùng chưa đăng nhập phải đăng nhập trước
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
+        <LoginPage onSuccess={() => setCurrentTab('dashboard')} />
+        <footer className="mt-auto border-t border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xs py-6 text-center text-xs text-slate-500 dark:text-slate-400">
+          <div className="max-w-7xl mx-auto px-4 flex items-center justify-center">
+            <p>© {new Date().getFullYear()} STUDENT STUDY — Nền tảng học tập & ôn luyện kiến thức thế hệ mới.</p>
+          </div>
+        </footer>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">

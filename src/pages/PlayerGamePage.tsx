@@ -181,6 +181,7 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
         body: JSON.stringify({
           pin: pin.trim(),
           name: playerName.trim(),
+          playerName: playerName.trim(),
           avatar: selectedAvatar,
         }),
       });

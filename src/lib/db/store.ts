@@ -825,8 +825,18 @@ class DataStore {
     return Array.from(this.activeRooms.values()).filter(r => r.status !== 'FINISHED' && !r.isExpired);
   }
 
-  public joinGameRoom(pin: string, player: { name: string; avatar?: string }): { session: GameSession; player: Player } {
-    const session = this.activeRooms.get(pin);
+  public joinGameRoom(pin: string, player: { name?: string; avatar?: string }): { session: GameSession; player: Player } {
+    const cleanPin = (pin || '').trim();
+    let session = this.activeRooms.get(cleanPin);
+    if (!session) {
+      for (const s of this.activeRooms.values()) {
+        if (s.pin === cleanPin || s.id === cleanPin) {
+          session = s;
+          break;
+        }
+      }
+    }
+
     if (!session || session.isExpired || session.status === 'FINISHED') {
       throw new Error('Mã PIN không tồn tại hoặc phòng thi đã kết thúc / hết hiệu lực');
     }
@@ -834,17 +844,20 @@ class DataStore {
       throw new Error('Trận đấu đang diễn ra hoặc đã kết thúc, mã PIN không còn hiệu lực');
     }
 
+    const rawName = player?.name || (player as any)?.playerName || 'Thí sinh';
+    const cleanName = (typeof rawName === 'string' ? rawName : String(rawName || '')).trim() || 'Thí sinh';
+
     const playerId = 'p_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
     const newPlayer: Player = {
       id: playerId,
-      name: player.name.trim(),
-      avatar: player.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120',
+      name: cleanName,
+      avatar: player?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120',
       score: 0,
       streak: 0,
     };
 
     // Replace if player with exact same name already in room
-    const existingIndex = session.players.findIndex(p => p.name.toLowerCase() === player.name.trim().toLowerCase());
+    const existingIndex = session.players.findIndex(p => (p.name || '').trim().toLowerCase() === cleanName.toLowerCase());
     if (existingIndex >= 0) {
       session.players[existingIndex] = newPlayer;
     } else {
@@ -852,7 +865,8 @@ class DataStore {
     }
 
     session.updatedAt = new Date().toISOString();
-    this.activeRooms.set(pin, session);
+    this.activeRooms.set(session.pin, session);
+    this.activeRooms.set(session.id, session);
     this.saveActiveRooms();
 
     return { session, player: newPlayer };

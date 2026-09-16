@@ -26,19 +26,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const storedUser = localStorage.getItem(AUTH_STORAGE_KEY);
       const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
-      if (storedUser && storedToken) {
+
+      // Invalidate legacy default demo token if present
+      if (storedToken === 'token_default_admin') {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        setCurrentUser(null);
+        setToken(null);
+      } else if (storedUser && storedToken) {
         setCurrentUser(JSON.parse(storedUser));
         setToken(storedToken);
       } else {
-        // Default to super admin on initial visit for seamless demonstration
-        const defaultAdmin = INITIAL_USERS[0];
-        setCurrentUser(defaultAdmin);
-        setToken('token_default_admin');
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(defaultAdmin));
-        localStorage.setItem(TOKEN_STORAGE_KEY, 'token_default_admin');
+        setCurrentUser(null);
+        setToken(null);
       }
     } catch (e) {
       console.warn('Error reading auth state', e);
+      setCurrentUser(null);
+      setToken(null);
     } finally {
       setIsLoading(false);
     }
