@@ -9,11 +9,19 @@ import {
   CheckCircle2, 
   Volume2, 
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  Copy,
+  Check,
+  Database,
+  Share2,
+  AlertCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { GameSession, Quiz } from '../types';
 import { speakText } from '../utils/tts';
+import { useAuth } from '../context/AuthContext';
+import { getClientFirestore } from '../lib/firebase/client';
 
 interface HostGameProps {
   quizId: string;
@@ -21,21 +29,26 @@ interface HostGameProps {
 }
 
 export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
+  const { currentUser } = useAuth();
   const [session, setSession] = useState<GameSession | null>(null);
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [timeLeft, setTimeLeft] = useState(20);
   const [showExplanation, setShowExplanation] = useState(false);
+  const [copiedPin, setCopiedPin] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
   const pollingRef = useRef<any>(null);
 
   // Initialize Game Session
   useEffect(() => {
+    setInitError(null);
     fetch('/api/game/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         quizId,
-        hostId: 'teacher_host_01',
-        hostName: 'ThS. Trần Văn Minh',
+        hostId: currentUser?.uid || 'host_teacher',
+        hostName: currentUser?.displayName || 'ThS. Trần Văn Minh',
       }),
     })
       .then(res => res.json())
@@ -44,12 +57,40 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
           setSession(json.data.session);
           setQuiz(json.data.quiz);
           startPolling(json.data.session.id);
+        } else {
+          setInitError(json.error?.message || 'Không thể tạo phòng thi đấu.');
         }
       })
-      .catch(console.error);
+      .catch(err => {
+        console.error(err);
+        setInitError('Lỗi kết nối máy chủ khi tạo phòng thi.');
+      });
 
     return () => clearInterval(pollingRef.current);
-  }, [quizId]);
+  }, [quizId, currentUser]);
+
+  // Firestore Realtime listener for zero-latency multiplayer updates
+  useEffect(() => {
+    if (!session?.id) return;
+    const db = getClientFirestore();
+    if (!db) return;
+
+    try {
+      const unsub = onSnapshot(doc(db, 'gameSessions', session.id), (snap) => {
+        if (snap.exists()) {
+          const cloudData = snap.data() as GameSession;
+          if (cloudData) {
+            setSession(cloudData);
+          }
+        }
+      }, (err) => {
+        console.warn('[Firestore Live] onSnapshot note:', err.message);
+      });
+      return () => unsub();
+    } catch (e) {
+      console.warn('[Firestore Live] Listener setup note:', e);
+    }
+  }, [session?.id]);
 
   const startPolling = (sessionId: string) => {
     clearInterval(pollingRef.current);
@@ -64,6 +105,22 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
         console.warn(e);
       }
     }, 1500);
+  };
+
+  const handleCopyPin = () => {
+    if (!session?.pin) return;
+    navigator.clipboard.writeText(session.pin);
+    setCopiedPin(true);
+    setTimeout(() => setCopiedPin(false), 2000);
+  };
+
+  const handleCopyLink = () => {
+    if (!session?.pin) return;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const shareUrl = `${origin}/?tab=multiplayer&pin=${session.pin}`;
+    navigator.clipboard.writeText(shareUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const handleStartGame = async () => {
@@ -100,6 +157,17 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
     }
   };
 
+  const handleEndSessionAndExit = async () => {
+    if (session?.id) {
+      try {
+        await fetch(`/api/game/${session.id}/end`, { method: 'POST' });
+      } catch (e) {
+        console.warn('Could not end session:', e);
+      }
+    }
+    onBack();
+  };
+
   // Timer tick for question
   useEffect(() => {
     if (session?.status !== 'QUESTION_ACTIVE') return;
@@ -116,10 +184,29 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
     return () => clearInterval(interval);
   }, [session?.status, session?.currentQuestionIndex]);
 
+  if (initError) {
+    return (
+      <div className="max-w-md mx-auto py-16 text-center space-y-4">
+        <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-950 text-rose-600 flex items-center justify-center mx-auto">
+          <AlertCircle className="w-6 h-6" />
+        </div>
+        <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">Không thể khởi tạo phòng</h3>
+        <p className="text-xs text-slate-400">{initError}</p>
+        <button
+          onClick={onBack}
+          className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold"
+        >
+          Quay lại kho Quiz
+        </button>
+      </div>
+    );
+  }
+
   if (!session || !quiz) {
     return (
-      <div className="py-20 text-center text-slate-400 text-xs">
-        Đang khởi tạo phòng thi đấu Multiplayer...
+      <div className="py-24 text-center space-y-3">
+        <div className="w-8 h-8 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin mx-auto" />
+        <p className="text-xs text-slate-400 font-medium">Đang khởi tạo phòng thi đấu Multiplayer & kết nối Cloud Firestore...</p>
       </div>
     );
   }
@@ -131,29 +218,61 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
         {/* Top Header */}
         <div className="flex items-center justify-between">
           <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white"
+            onClick={handleEndSessionAndExit}
+            className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Hủy phòng thi đấu
+            Hủy & Đóng phòng thi đấu
           </button>
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-xs font-bold">
-            <Radio className="w-3.5 h-3.5 animate-pulse text-indigo-600" />
-            Live Lobby
+          
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold">
+              <Database className="w-3 h-3 text-emerald-500" />
+              <span>Realtime DB: Active</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            </div>
+
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-xs font-bold">
+              <Radio className="w-3.5 h-3.5 animate-pulse text-indigo-600" />
+              Live Lobby
+            </div>
           </div>
         </div>
 
         {/* PIN Banner */}
-        <div className="bg-linear-to-r from-indigo-700 via-indigo-600 to-blue-600 rounded-3xl p-8 text-white shadow-2xl text-center space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-widest text-indigo-200">
-            Mở tab Player và nhập Game PIN:
-          </p>
-          <div className="text-5xl sm:text-7xl font-black tracking-widest font-mono text-amber-300 drop-shadow-md">
-            {session.pin}
+        <div className="bg-linear-to-r from-indigo-700 via-indigo-600 to-blue-600 rounded-3xl p-8 text-white shadow-2xl text-center space-y-4 relative overflow-hidden">
+          <div className="relative z-10 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-widest text-indigo-200">
+              Mời người chơi truy cập Multiplayer và nhập Game PIN:
+            </p>
+            
+            <div className="inline-flex items-center gap-3 bg-black/20 backdrop-blur-xs px-6 py-2 rounded-2xl border border-white/10">
+              <span className="text-5xl sm:text-7xl font-black tracking-widest font-mono text-amber-300 drop-shadow-md select-all">
+                {session.pin}
+              </span>
+              <button
+                onClick={handleCopyPin}
+                title="Sao chép mã PIN"
+                className="p-2.5 rounded-xl bg-white/15 hover:bg-white/25 active:scale-95 transition-all text-white cursor-pointer"
+              >
+                {copiedPin ? <Check className="w-5 h-5 text-emerald-300" /> : <Copy className="w-5 h-5" />}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <button
+                onClick={handleCopyLink}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium backdrop-blur-xs transition-colors"
+              >
+                {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Share2 className="w-3.5 h-3.5" />}
+                <span>{copiedLink ? 'Đã sao chép link tham gia!' : 'Sao chép link tham gia nhanh'}</span>
+              </button>
+            </div>
+
+            <p className="text-xs text-indigo-100 pt-1">
+              Chủ đề: <strong className="text-white">{quiz.title}</strong> • {quiz.questions.length} câu hỏi • Host: <strong className="text-white">{session.hostName}</strong>
+            </p>
           </div>
-          <p className="text-xs text-indigo-100">
-            Chủ đề: <strong className="text-white">{quiz.title}</strong> • {quiz.questions.length} câu hỏi
-          </p>
         </div>
 
         {/* Players List Grid */}
@@ -425,10 +544,10 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
 
       <div className="pt-6">
         <button
-          onClick={onBack}
-          className="px-6 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold text-xs hover:opacity-90 transition-opacity"
+          onClick={handleEndSessionAndExit}
+          className="px-6 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold text-xs hover:opacity-90 transition-opacity cursor-pointer shadow-lg"
         >
-          Hoàn tất & Về danh sách Quiz
+          Hoàn tất & Đóng phòng thi đấu (Hết hiệu lực PIN)
         </button>
       </div>
     </div>

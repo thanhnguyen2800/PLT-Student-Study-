@@ -111,6 +111,10 @@ function MainApp() {
           <PlayerGamePage
             initialPin={initialPin}
             onBack={() => setCurrentTab('dashboard')}
+            onHostQuiz={(quizId) => {
+              setSelectedQuizId(quizId);
+              setCurrentTab('host');
+            }}
           />
         )}
 

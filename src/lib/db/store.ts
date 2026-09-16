@@ -5,6 +5,8 @@ import {
   GameResult, 
   AuditLog, 
   RealtimeGameSession, 
+  GameSession,
+  Player,
   UserRole, 
   UserStatus 
 } from '../../types';
@@ -29,6 +31,7 @@ class DataStore {
   private gameResults: GameResult[] = [];
   private auditLogs: AuditLog[] = [];
   private activeGames: Map<string, RealtimeGameSession> = new Map();
+  private activeRooms: Map<string, GameSession> = new Map();
 
   constructor() {
     this.init();
@@ -66,8 +69,17 @@ class DataStore {
         }
         const storedActiveGames = localStorage.getItem(STORAGE_KEYS.ACTIVE_GAMES);
         if (storedActiveGames) {
-          const gamesArr: RealtimeGameSession[] = JSON.parse(storedActiveGames);
-          gamesArr.forEach(g => this.activeGames.set(g.id, g));
+          const gamesArr: any[] = JSON.parse(storedActiveGames);
+          gamesArr.forEach(g => {
+            const key = g.pin || g.id;
+            if (key) {
+              if (Array.isArray(g.players)) {
+                this.activeRooms.set(key, g);
+              } else {
+                this.activeGames.set(key, g);
+              }
+            }
+          });
         }
       } catch (e) {
         console.warn('Error reading from localStorage', e);
@@ -708,6 +720,262 @@ class DataStore {
 
   public getGameResults(): GameResult[] {
     return this.gameResults;
+  }
+
+  // ===================== MULTIPLAYER GAME ROOMS (REALTIME DB) =====================
+  public createGameRoom(quizId: string, host?: { uid?: string; displayName?: string }): { session: GameSession; quiz: Quiz } {
+    const quiz = this.quizzes.get(quizId);
+    if (!quiz || !quiz.questions || quiz.questions.length === 0) {
+      throw new Error('Quiz không tồn tại hoặc chưa có câu hỏi để tạo phòng thi');
+    }
+
+    let pin = '';
+    do {
+      pin = Math.floor(100000 + Math.random() * 900000).toString();
+    } while (this.activeRooms.has(pin));
+
+    const now = new Date().toISOString();
+    const session: GameSession = {
+      id: pin,
+      pin: pin,
+      quizId: quiz.id,
+      quizTitle: quiz.title,
+      hostId: host?.uid || 'host_teacher',
+      hostName: host?.displayName || 'ThS. Trần Văn Minh',
+      status: 'WAITING',
+      currentQuestionIndex: 0,
+      totalQuestions: quiz.questions.length,
+      players: [],
+      answers: {},
+      createdAt: now,
+      updatedAt: now,
+      isExpired: false,
+      questions: quiz.questions,
+      currentQuestion: quiz.questions[0],
+    };
+
+    this.activeRooms.set(pin, session);
+    this.saveActiveRooms();
+
+    return { session, quiz };
+  }
+
+  public getGameRoom(pinOrId: string): GameSession | null {
+    return this.activeRooms.get(pinOrId) || null;
+  }
+
+  public getAllActiveRooms(): GameSession[] {
+    return Array.from(this.activeRooms.values()).filter(r => r.status !== 'FINISHED' && !r.isExpired);
+  }
+
+  public joinGameRoom(pin: string, player: { name: string; avatar?: string }): { session: GameSession; player: Player } {
+    const session = this.activeRooms.get(pin);
+    if (!session || session.isExpired || session.status === 'FINISHED') {
+      throw new Error('Mã PIN không tồn tại hoặc phòng thi đã kết thúc / hết hiệu lực');
+    }
+    if (session.status !== 'WAITING') {
+      throw new Error('Trận đấu đang diễn ra hoặc đã kết thúc, mã PIN không còn hiệu lực');
+    }
+
+    const playerId = 'p_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+    const newPlayer: Player = {
+      id: playerId,
+      name: player.name.trim(),
+      avatar: player.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120',
+      score: 0,
+      streak: 0,
+    };
+
+    // Replace if player with exact same name already in room
+    const existingIndex = session.players.findIndex(p => p.name.toLowerCase() === player.name.trim().toLowerCase());
+    if (existingIndex >= 0) {
+      session.players[existingIndex] = newPlayer;
+    } else {
+      session.players.push(newPlayer);
+    }
+
+    session.updatedAt = new Date().toISOString();
+    this.activeRooms.set(pin, session);
+    this.saveActiveRooms();
+
+    return { session, player: newPlayer };
+  }
+
+  public startGameRoom(pin: string): GameSession {
+    const session = this.activeRooms.get(pin);
+    if (!session || session.isExpired) throw new Error('Không tìm thấy phòng thi đấu hoặc phòng đã hết hiệu lực');
+
+    const quiz = this.quizzes.get(session.quizId);
+    session.status = 'QUESTION_ACTIVE';
+    session.currentQuestionIndex = 0;
+    if (quiz && quiz.questions && quiz.questions.length > 0) {
+      session.questions = quiz.questions;
+      session.currentQuestion = quiz.questions[0];
+    }
+    session.updatedAt = new Date().toISOString();
+    this.activeRooms.set(pin, session);
+    this.saveActiveRooms();
+    return session;
+  }
+
+  public submitRoomAnswer(
+    pin: string, 
+    playerId: string, 
+    questionId: string, 
+    answer: any, 
+    timeTaken: number = 5
+  ): { isCorrect: boolean; points: number; session: GameSession } {
+    const session = this.activeRooms.get(pin);
+    if (!session) throw new Error('Không tìm thấy phòng thi đấu');
+    const quiz = this.quizzes.get(session.quizId);
+    if (!quiz) throw new Error('Không tìm thấy dữ liệu Quiz');
+
+    const currentQ = quiz.questions[session.currentQuestionIndex];
+    if (!currentQ) throw new Error('Không tìm thấy câu hỏi hiện tại');
+
+    const qKey = currentQ.id || ('q_' + session.currentQuestionIndex);
+    if (!session.answers[qKey]) {
+      session.answers[qKey] = {};
+    }
+
+    if (session.answers[qKey][playerId]) {
+      const existing = session.answers[qKey][playerId];
+      return { isCorrect: existing.isCorrect, points: existing.pointsEarned || existing.score || 0, session };
+    }
+
+    let isCorrect = false;
+    if (Array.isArray(currentQ.correctAnswer)) {
+      if (Array.isArray(answer)) {
+        isCorrect = currentQ.correctAnswer.length === answer.length &&
+          currentQ.correctAnswer.every(val => answer.includes(val));
+      }
+    } else {
+      isCorrect = Number(currentQ.correctAnswer) === Number(answer);
+    }
+
+    const timeLimit = currentQ.timeLimit || 20;
+    const timeRatio = Math.max(0, 1 - (timeTaken / timeLimit));
+    const basePoints = currentQ.points || 1000;
+    let pointsEarned = 0;
+
+    const player = session.players.find(p => p.id === playerId);
+    if (isCorrect) {
+      pointsEarned = Math.round(basePoints * (0.5 + 0.5 * timeRatio));
+      if (player) {
+        player.streak = (player.streak || 0) + 1;
+        if (player.streak > 1) {
+          pointsEarned += Math.min(player.streak * 50, 250);
+        }
+        player.score = (player.score || 0) + pointsEarned;
+      }
+    } else {
+      if (player) {
+        player.streak = 0;
+      }
+    }
+
+    session.answers[qKey][playerId] = {
+      answer,
+      isCorrect,
+      pointsEarned,
+      score: pointsEarned,
+      timeTaken,
+      answeredAt: Date.now(),
+    };
+
+    session.updatedAt = new Date().toISOString();
+    this.activeRooms.set(pin, session);
+    this.saveActiveRooms();
+
+    return { isCorrect, points: pointsEarned, session };
+  }
+
+  public nextRoomQuestion(pin: string): GameSession {
+    const session = this.activeRooms.get(pin);
+    if (!session) throw new Error('Không tìm thấy phòng thi đấu');
+    const quiz = this.quizzes.get(session.quizId);
+    if (!quiz) throw new Error('Không tìm thấy Quiz');
+
+    if (session.status === 'QUESTION_ACTIVE') {
+      session.status = 'LEADERBOARD';
+    } else if (session.status === 'LEADERBOARD') {
+      const nextIndex = session.currentQuestionIndex + 1;
+      if (nextIndex >= quiz.questions.length) {
+        session.status = 'FINISHED';
+        session.isExpired = true; // Expire PIN once all questions finished
+        session.currentQuestion = undefined;
+        this.saveFinishedRoomAsResult(session);
+      } else {
+        session.currentQuestionIndex = nextIndex;
+        session.status = 'QUESTION_ACTIVE';
+        session.currentQuestion = quiz.questions[nextIndex];
+      }
+    }
+
+    session.updatedAt = new Date().toISOString();
+    this.activeRooms.set(pin, session);
+    this.saveActiveRooms();
+    return session;
+  }
+
+  public endOrExpireGameRoom(pin: string): GameSession | null {
+    const session = this.activeRooms.get(pin);
+    if (session) {
+      session.status = 'FINISHED';
+      session.isExpired = true;
+      session.updatedAt = new Date().toISOString();
+      this.saveFinishedRoomAsResult(session);
+      this.activeRooms.delete(pin);
+      this.saveActiveRooms();
+      return session;
+    }
+    return null;
+  }
+
+  private saveFinishedRoomAsResult(session: GameSession) {
+    const sorted = [...session.players].sort((a, b) => b.score - a.score);
+    const winner = sorted[0] || { name: 'Người chơi', score: 0 };
+    const rankedPlayers = sorted.map((p, idx) => ({
+      id: p.id,
+      name: p.name,
+      score: p.score,
+      rank: idx + 1,
+      correctCount: 0,
+      totalQuestions: session.totalQuestions || 0,
+      accuracy: 100,
+    }));
+
+    const result: GameResult = {
+      id: 'res_' + session.pin + '_' + Date.now(),
+      quizId: session.quizId,
+      quizTitle: session.quizTitle || 'Trận thi đấu Multiplayer',
+      hostId: session.hostId,
+      hostName: session.hostName,
+      players: rankedPlayers,
+      winner: { name: winner.name, score: winner.score },
+      startedAt: session.createdAt,
+      finishedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+
+    this.gameResults.unshift(result);
+    this.saveGameResults();
+  }
+
+  public deleteGameRoom(pin: string): boolean {
+    const deleted = this.activeRooms.delete(pin);
+    this.saveActiveRooms();
+    return deleted;
+  }
+
+  private saveActiveRooms() {
+    if (this.isClient()) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_GAMES, JSON.stringify(Array.from(this.activeRooms.values())));
+      } catch (e) {
+        console.warn('Error saving active rooms to localStorage', e);
+      }
+    }
   }
 
   // ===================== AUDIT LOGS =====================

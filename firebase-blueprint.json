@@ -82,6 +82,27 @@
         "timestamp": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "action", "timestamp"]
+    },
+    "GameSession": {
+      "title": "GameSession",
+      "description": "Realtime multiplayer game room and live state",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "pin": { "type": "string" },
+        "quizId": { "type": "string" },
+        "quizTitle": { "type": "string" },
+        "hostId": { "type": "string" },
+        "hostName": { "type": "string" },
+        "status": { "type": "string", "enum": ["WAITING", "QUESTION_ACTIVE", "LEADERBOARD", "FINISHED"] },
+        "currentQuestionIndex": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "players": { "type": "array" },
+        "answers": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "pin", "quizId", "hostId", "status"]
     }
   },
   "firestore": {
@@ -100,6 +121,10 @@
     "/quizAttempts/{attemptId}": {
       "schema": "QuizAttempt",
       "description": "User completion scores and logs"
+    },
+    "/gameSessions/{sessionId}": {
+      "schema": "GameSession",
+      "description": "Live realtime multiplayer game rooms and player scores"
     },
     "/auditLogs/{logId}": {
       "schema": "AuditLog",

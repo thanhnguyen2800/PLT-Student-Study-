@@ -20,6 +20,8 @@ import {
   loadAllAttemptsFromFirestore,
   saveAuditLogToFirestore,
   loadAllAuditLogsFromFirestore,
+  saveGameSessionToFirestore,
+  getGameSessionFromFirestore,
 } from './src/lib/firebase/serverFirestore.js';
 
 dotenv.config();
@@ -488,74 +490,214 @@ app.get('/api/firebase/status', (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// Realtime Multiplayer Endpoints (Kahoot-like)
+// Realtime Multiplayer Endpoints (Kahoot-like & Live Classroom)
 // -----------------------------------------------------------------------------
-app.post('/api/realtime/games/create', (req, res) => {
-  try {
-    const { quizId, host } = req.body;
-    const session = dataStore.createGameSession(quizId, host);
-    res.status(201).json({ success: true, data: session });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: { message: err.message } });
-  }
-});
 
-app.get('/api/realtime/games/:pin', (req, res) => {
+// 1. Create Room (Multiplayer Live Session)
+const handleCreateGame = async (req: express.Request, res: express.Response) => {
   try {
-    const session = dataStore.getGameSession(req.params.pin);
-    if (!session) {
-      return res.status(404).json({ success: false, error: { message: 'Phòng chơi không tồn tại' } });
+    const { quizId, hostId, hostName, host } = req.body;
+    if (!quizId) {
+      return res.status(400).json({ success: false, error: { message: 'Vui lòng chọn Quiz để tạo phòng thi đấu' } });
     }
-    res.json({ success: true, data: session });
+
+    const hostData = {
+      uid: hostId || host?.uid || 'host_user',
+      displayName: hostName || host?.displayName || 'Host Giảng viên',
+    };
+
+    const result = dataStore.createGameRoom(quizId, hostData);
+
+    // Sync to Cloud Firestore Realtime Database
+    saveGameSessionToFirestore(result.session).catch(e => {
+      console.warn('[Firestore] Async save game session failed:', e);
+    });
+
+    res.status(201).json({
+      success: true,
+      data: {
+        session: result.session,
+        quiz: result.quiz,
+      },
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { message: err.message || 'Không thể tạo phòng thi đấu' } });
+  }
+};
+app.post('/api/game/create', handleCreateGame);
+app.post('/api/realtime/games/create', handleCreateGame);
+
+// 2. Get Game Session by PIN/ID
+const handleGetGame = async (req: express.Request, res: express.Response) => {
+  try {
+    const pin = req.params.pin || req.params.id;
+    let session = dataStore.getGameRoom(pin);
+
+    // If not in local memory, attempt fallback retrieval from Cloud Firestore
+    if (!session) {
+      const cloudSession = await getGameSessionFromFirestore(pin);
+      if (cloudSession) {
+        session = cloudSession;
+      }
+    }
+
+    if (!session) {
+      return res.status(404).json({ success: false, error: { message: 'Phòng thi đấu không tồn tại hoặc đã kết thúc' } });
+    }
+
+    const quiz = dataStore.getQuizById(session.quizId);
+    res.json({ 
+      success: true, 
+      data: {
+        ...session,
+        questions: session.questions || quiz?.questions,
+        currentQuestion: session.currentQuestion || quiz?.questions?.[session.currentQuestionIndex],
+        quiz: quiz || null,
+      } 
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }
-});
+};
+app.get('/api/game/:pin', handleGetGame);
+app.get('/api/realtime/games/:pin', handleGetGame);
 
-app.post('/api/realtime/games/:pin/join', (req, res) => {
+// 3. Join Game Session
+const handleJoinGame = async (req: express.Request, res: express.Response) => {
   try {
-    const { player } = req.body;
-    const session = dataStore.joinGameSession(req.params.pin, player);
+    const pin = req.params.pin || req.body.pin;
+    const { name, avatar, player } = req.body;
+    const playerName = name || player?.name;
+    const playerAvatar = avatar || player?.avatar;
+
+    if (!pin || !playerName) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Vui lòng cung cấp mã PIN và tên người chơi' },
+      });
+    }
+
+    const result = dataStore.joinGameRoom(pin, { name: playerName, avatar: playerAvatar });
+    const quiz = dataStore.getQuizById(result.session.quizId);
+
+    // Sync to Cloud Firestore
+    saveGameSessionToFirestore(result.session).catch(e => {
+      console.warn('[Firestore] Async sync join session failed:', e);
+    });
+
+    res.json({
+      success: true,
+      data: {
+        session: result.session,
+        player: result.player,
+        quiz: quiz || null,
+      },
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { message: err.message || 'Không thể tham gia phòng thi' } });
+  }
+};
+app.post('/api/game/join', handleJoinGame);
+app.post('/api/realtime/games/:pin/join', handleJoinGame);
+
+// End / Close Room (Expire PIN immediately)
+const handleEndGame = async (req: express.Request, res: express.Response) => {
+  try {
+    const pin = req.params.pin || req.params.id;
+    const ended = dataStore.endOrExpireGameRoom(pin);
+    if (ended) {
+      saveGameSessionToFirestore(ended).catch(console.warn);
+    }
+    res.json({ success: true, message: 'Phòng thi đã kết thúc, mã PIN hết hiệu lực.' });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { message: err.message } });
+  }
+};
+app.post('/api/game/:pin/end', handleEndGame);
+app.delete('/api/game/:pin', handleEndGame);
+
+// 4. Start Game
+const handleStartGame = async (req: express.Request, res: express.Response) => {
+  try {
+    const pin = req.params.pin || req.params.id;
+    const session = dataStore.startGameRoom(pin);
+
+    // Sync to Cloud Firestore
+    saveGameSessionToFirestore(session).catch(e => {
+      console.warn('[Firestore] Async sync start game failed:', e);
+    });
+
     res.json({ success: true, data: session });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { message: err.message } });
   }
-});
+};
+app.post('/api/game/:pin/start', handleStartGame);
+app.post('/api/realtime/games/:pin/start', handleStartGame);
 
-app.post('/api/realtime/games/:pin/start', (req, res) => {
+// 5. Submit Answer
+const handleSubmitAnswer = async (req: express.Request, res: express.Response) => {
   try {
-    const session = dataStore.startGameSession(req.params.pin);
+    const pin = req.params.pin || req.params.id;
+    const { playerId, questionId, answer, timeTaken, answerIndex, timeSpent } = req.body;
+
+    const actualAnswer = answer !== undefined ? answer : answerIndex;
+    const actualTime = timeTaken !== undefined ? timeTaken : (timeSpent !== undefined ? timeSpent : 5);
+
+    const result = dataStore.submitRoomAnswer(
+      pin,
+      playerId,
+      questionId || 'q_0',
+      actualAnswer,
+      actualTime
+    );
+
+    // Sync to Cloud Firestore
+    saveGameSessionToFirestore(result.session).catch(e => {
+      console.warn('[Firestore] Async sync submit answer failed:', e);
+    });
+
+    res.json({
+      success: true,
+      data: {
+        isCorrect: result.isCorrect,
+        points: result.points,
+        session: result.session,
+      },
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { message: err.message } });
+  }
+};
+app.post('/api/game/:pin/answer', handleSubmitAnswer);
+app.post('/api/realtime/games/:pin/answer', handleSubmitAnswer);
+
+// 6. Next Question / Leaderboard / Finish
+const handleNextQuestion = async (req: express.Request, res: express.Response) => {
+  try {
+    const pin = req.params.pin || req.params.id;
+    const session = dataStore.nextRoomQuestion(pin);
+
+    // Sync to Cloud Firestore
+    saveGameSessionToFirestore(session).catch(e => {
+      console.warn('[Firestore] Async sync next question failed:', e);
+    });
+
     res.json({ success: true, data: session });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { message: err.message } });
   }
-});
+};
+app.post('/api/game/:pin/next', handleNextQuestion);
+app.post('/api/realtime/games/:pin/next', handleNextQuestion);
 
-app.post('/api/realtime/games/:pin/answer', (req, res) => {
+// 7. Active Rooms & History
+app.get('/api/game/rooms/active', (req, res) => {
   try {
-    const { playerId, answerIndex, timeSpent } = req.body;
-    const session = dataStore.submitGameAnswer(req.params.pin, playerId, answerIndex, timeSpent);
-    res.json({ success: true, data: session });
+    const rooms = dataStore.getAllActiveRooms();
+    res.json({ success: true, data: rooms });
   } catch (err: any) {
-    res.status(400).json({ success: false, error: { message: err.message } });
-  }
-});
-
-app.post('/api/realtime/games/:pin/next', (req, res) => {
-  try {
-    const session = dataStore.nextGameQuestion(req.params.pin);
-    res.json({ success: true, data: session });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: { message: err.message } });
-  }
-});
-
-app.post('/api/realtime/games/:pin/results', (req, res) => {
-  try {
-    const session = dataStore.showGameResults(req.params.pin);
-    res.json({ success: true, data: session });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: { message: err.message } });
+    res.status(500).json({ success: false, error: { message: err.message } });
   }
 });
 

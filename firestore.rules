@@ -21,6 +21,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Realtime multiplayer live game sessions
+    match /gameSessions/{sessionId} {
+      allow read, write: if true;
+    }
+
     // User accounts managed via backend RBAC
     match /users/{userId} {
       allow read, write: if true;

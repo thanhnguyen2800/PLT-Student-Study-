@@ -293,3 +293,60 @@ export async function loadAllAuditLogsFromFirestore(): Promise<AuditLog[]> {
     return [];
   }
 }
+
+// =============================================================================
+// GAME SESSION OPERATIONS (FIRESTORE REALTIME DATABASE SYNC)
+// =============================================================================
+
+export async function saveGameSessionToFirestore(session: any): Promise<boolean> {
+  const db = getBackendFirestore();
+  const sessionId = session?.pin || session?.id;
+  if (!db || !sessionId) return false;
+
+  try {
+    const sessionRef = doc(db, 'gameSessions', String(sessionId));
+    const sanitized = sanitizeForFirestore({
+      ...session,
+      id: String(sessionId),
+      pin: String(sessionId),
+      updatedAt: new Date().toISOString(),
+    });
+    await setDoc(sessionRef, sanitized, { merge: true });
+    return true;
+  } catch (err) {
+    console.error(`[Firebase Server] Error saving game session ${sessionId} to Firestore:`, err);
+    return false;
+  }
+}
+
+export async function getGameSessionFromFirestore(sessionId: string): Promise<any | null> {
+  const db = getBackendFirestore();
+  if (!db || !sessionId) return null;
+
+  try {
+    const sessionRef = doc(db, 'gameSessions', String(sessionId));
+    const snap = await getDoc(sessionRef);
+    if (snap.exists()) {
+      return snap.data();
+    }
+    return null;
+  } catch (err) {
+    console.error(`[Firebase Server] Error fetching game session ${sessionId} from Firestore:`, err);
+    return null;
+  }
+}
+
+export async function deleteGameSessionFromFirestore(sessionId: string): Promise<boolean> {
+  const db = getBackendFirestore();
+  if (!db || !sessionId) return false;
+
+  try {
+    const sessionRef = doc(db, 'gameSessions', String(sessionId));
+    await deleteDoc(sessionRef);
+    return true;
+  } catch (err) {
+    console.error(`[Firebase Server] Error deleting game session ${sessionId} from Firestore:`, err);
+    return false;
+  }
+}
+

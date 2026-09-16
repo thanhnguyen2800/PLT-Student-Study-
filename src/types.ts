@@ -110,6 +110,8 @@ export interface GameSession {
   id: string;
   pin: string;
   quizId: string;
+  quizTitle?: string;
+  totalQuestions?: number;
   hostId: string;
   hostName: string;
   status: 'WAITING' | 'QUESTION_ACTIVE' | 'LEADERBOARD' | 'FINISHED';
@@ -117,6 +119,10 @@ export interface GameSession {
   players: Player[];
   answers: Record<string, Record<string, any>>;
   createdAt: string;
+  updatedAt?: string;
+  isExpired?: boolean;
+  questions?: Question[];
+  currentQuestion?: Question;
 }
 
 export type MultiplayerGameState = 'WAITING' | 'QUESTION' | 'RESULTS' | 'FINISHED';
