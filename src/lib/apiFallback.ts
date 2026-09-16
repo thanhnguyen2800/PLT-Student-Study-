@@ -234,8 +234,13 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
 
   if (path.startsWith('/api/admin/users/') && path.endsWith('/status') && (method === 'PATCH' || method === 'PUT')) {
     const id = path.split('/')[4];
-    const user = dataStore.updateUser(id, { status: body.status });
-    return makeJsonResponse({ success: true, data: user });
+    try {
+      dataStore.assertCanManageUser(body.actorId, id);
+      const user = dataStore.updateUser(id, { status: body.status }, body.actorId);
+      return makeJsonResponse({ success: true, data: user });
+    } catch (e: any) {
+      return makeJsonResponse({ success: false, error: { message: e.message } }, 403);
+    }
   }
 
   if (path.startsWith('/api/admin/users/') && path.endsWith('/role') && (method === 'PATCH' || method === 'PUT')) {
@@ -246,8 +251,13 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
 
   if (path.startsWith('/api/admin/users/') && method === 'DELETE') {
     const id = path.split('/')[4];
-    dataStore.deleteUser(id);
-    return makeJsonResponse({ success: true });
+    try {
+      dataStore.assertCanManageUser(body.actorId, id);
+      dataStore.deleteUser(id, body.actorId);
+      return makeJsonResponse({ success: true });
+    } catch (e: any) {
+      return makeJsonResponse({ success: false, error: { message: e.message } }, 403);
+    }
   }
 
   if (path === '/api/admin/audit-logs' && method === 'GET') {

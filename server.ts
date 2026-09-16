@@ -158,6 +158,9 @@ app.put('/api/admin/users/:uid', (req, res) => {
   try {
     const { uid } = req.params;
     const updates = req.body;
+    if (updates.status !== undefined) {
+      dataStore.assertCanManageUser(updates.actorId || updates.actorUid, uid);
+    }
     const updated = dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid);
     saveUserToFirestore(updated).catch(e => console.warn('[Firestore] Async update user failed:', e));
     res.json({ success: true, data: updated });
@@ -170,6 +173,9 @@ app.patch('/api/admin/users/:uid', (req, res) => {
   try {
     const { uid } = req.params;
     const updates = req.body;
+    if (updates.status !== undefined) {
+      dataStore.assertCanManageUser(updates.actorId || updates.actorUid, uid);
+    }
     const updated = dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid);
     saveUserToFirestore(updated).catch(e => console.warn('[Firestore] Async patch user failed:', e));
     res.json({ success: true, data: updated });
@@ -185,7 +191,8 @@ app.patch('/api/admin/users/:uid/status', (req, res) => {
     if (!status) {
       return res.status(400).json({ success: false, error: { message: 'Trạng thái không hợp lệ' } });
     }
-    const updated = dataStore.updateUser(uid, { status }, actorName || actorId || 'ADMIN');
+    dataStore.assertCanManageUser(actorId, uid);
+    const updated = dataStore.updateUser(uid, { status }, actorId);
     saveUserToFirestore(updated).catch(e => console.warn('[Firestore] Async update user status failed:', e));
     res.json({ success: true, data: updated });
   } catch (err: any) {
@@ -212,7 +219,8 @@ app.delete('/api/admin/users/:uid', (req, res) => {
   try {
     const { uid } = req.params;
     const { actorId, actorName } = req.body || {};
-    const success = dataStore.deleteUser(uid, actorName || actorId || 'ADMIN');
+    dataStore.assertCanManageUser(actorId, uid);
+    const success = dataStore.deleteUser(uid, actorId);
     if (!success) {
       return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });
     }
@@ -299,6 +307,7 @@ const handleCsvImportRequest = (req: any, res: any) => {
             });
             continue;
           }
+          dataStore.assertCanManageUser(actorUid, user.uid);
           dataStore.deleteUser(user.uid, actorUid);
           deletedCount++;
         }

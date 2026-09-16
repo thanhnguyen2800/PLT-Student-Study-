@@ -261,6 +261,12 @@ export const AdminPage: React.FC = () => {
     return matchSearch && matchRole;
   });
 
+  const canManageUser = (user: User) => {
+    if (!currentUser || currentUser.uid === user.uid) return false;
+    if (currentUser.role === 'SUPER_ADMIN') return user.role !== 'SUPER_ADMIN';
+    return currentUser.role === 'ADMIN' && (user.role === 'TEACHER' || user.role === 'PLAYER');
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in pb-12">
       
@@ -449,19 +455,19 @@ export const AdminPage: React.FC = () => {
 
                         <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => handleToggleStatus(user)}
-                              title={user.status === 'ACTIVE' ? 'Khóa tài khoản' : 'Kích hoạt lại'}
-                              className={`p-1.5 rounded-lg border text-xs cursor-pointer ${
-                                user.status === 'ACTIVE'
-                                  ? 'border-amber-200 text-amber-600 hover:bg-amber-50'
-                                  : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
-                              }`}
-                            >
-                              {user.status === 'ACTIVE' ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                            </button>
-
-                            {user.role !== 'SUPER_ADMIN' && (
+                            {canManageUser(user) && (
+                              <>
+                                <button
+                                  onClick={() => handleToggleStatus(user)}
+                                  title={user.status === 'ACTIVE' ? 'Khóa tài khoản' : 'Kích hoạt lại'}
+                                  className={`p-1.5 rounded-lg border text-xs cursor-pointer ${
+                                    user.status === 'ACTIVE'
+                                      ? 'border-amber-200 text-amber-600 hover:bg-amber-50'
+                                      : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
+                                  }`}
+                                >
+                                  {user.status === 'ACTIVE' ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                                </button>
                               <button
                                 onClick={() => handleDeleteUser(user)}
                                 title="Xóa vĩnh viễn tài khoản"
@@ -469,6 +475,7 @@ export const AdminPage: React.FC = () => {
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
+                              </>
                             )}
                           </div>
                         </td>

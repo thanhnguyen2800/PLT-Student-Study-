@@ -354,6 +354,26 @@ class DataStore {
     return user;
   }
 
+  public canManageUser(actorUid: string | undefined, targetUid: string): boolean {
+    if (!actorUid) return false;
+
+    const actor = this.users.get(actorUid);
+    const target = this.users.get(targetUid);
+    if (!actor || !target || actor.uid === target.uid) return false;
+
+    if (actor.role === 'SUPER_ADMIN') {
+      return target.role !== 'SUPER_ADMIN';
+    }
+
+    return actor.role === 'ADMIN' && (target.role === 'TEACHER' || target.role === 'PLAYER');
+  }
+
+  public assertCanManageUser(actorUid: string | undefined, targetUid: string): void {
+    if (!this.canManageUser(actorUid, targetUid)) {
+      throw new Error('Bạn không có quyền khóa hoặc xóa tài khoản này');
+    }
+  }
+
   public deleteUser(uid: string, actorUid?: string): boolean {
     const user = this.users.get(uid);
     if (!user) return false;
