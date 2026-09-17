@@ -20,12 +20,28 @@ async function findUserByEmail(email: string) {
   return firestoreUser || (!isFirestoreReady() ? dataStore.getUserByEmail(email) : null);
 }
 
+async function assertCanCreateRole(actorId: string | undefined, targetRole: UserRole) {
+  const localActor = actorId ? dataStore.getUserById(actorId) : null;
+  if (localActor) {
+    dataStore.assertCanManageRole(actorId, targetRole);
+    return;
+  }
+
+  const cloudActor = isFirestoreReady()
+    ? (await loadAllUsersFromFirestore()).find(user => user.uid === actorId)
+    : null;
+  if (!cloudActor || (cloudActor.role !== 'SUPER_ADMIN' &&
+      !(cloudActor.role === 'ADMIN' && (targetRole === 'TEACHER' || targetRole === 'PLAYER')))) {
+    throw new Error('Bạn không có quyền quản lý tài khoản với vai trò này');
+  }
+}
+
 async function createUser(body: any, actorId?: string) {
   const { email, displayName, password, role, status, department, phone } = body;
   if (!email || !displayName || !role) {
     throw new Error('Thiếu các thông tin bắt buộc (email, displayName, role)');
   }
-  dataStore.assertCanManageRole(actorId, role as UserRole);
+  await assertCanCreateRole(actorId, role as UserRole);
   if (await findUserByEmail(email)) {
     const error: any = new Error(`Email "${email}" đã tồn tại trên hệ thống`);
     error.statusCode = 409;
