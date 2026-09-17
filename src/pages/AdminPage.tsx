@@ -251,8 +251,8 @@ export const AdminPage: React.FC = () => {
   const handleDownloadCsvTemplate = () => {
     const template = [
       'action,email,displayName,password,role,status,department,phone',
-      'CREATE,student05@studentstudy.edu,Nguyễn Mai Lan,Admin@123,PLAYER,ACTIVE,Khoa CNTT,0912345678',
-      'CREATE,student06@studentstudy.edu,Đặng Văn Nam,Admin@123,PLAYER,ACTIVE,Khoa Kinh Tế,0912345679',
+      'CREATE,student1@studentstudy.vn,Nguyễn Mai Lan,Admin@123,PLAYER,ACTIVE,Khoa CNTT,0912345678',
+      'CREATE,student2@studentstudy.vn,Đặng Văn Nam,Admin@123,PLAYER,ACTIVE,Khoa Kinh Tế,0912345679',
     ].join('\r\n');
     const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -705,7 +705,7 @@ export const AdminPage: React.FC = () => {
               rows={6}
               value={csvContent}
               onChange={e => setCsvContent(e.target.value)}
-              placeholder={`action,email,displayName,password,role,status,department,phone\nCREATE,student05@studentstudy.edu,Nguyễn Mai Lan,Admin@123,PLAYER,ACTIVE,Khoa CNTT,0912345678\nCREATE,student06@studentstudy.edu,Đặng Văn Nam,Admin@123,PLAYER,ACTIVE,Khoa Kinh Tế,0912345679`}
+                placeholder={`action,email,displayName,password,role,status,department,phone\nCREATE,student1@studentstudy.vn,Nguyễn Mai Lan,Admin@123,PLAYER,ACTIVE,Khoa CNTT,0912345678\nCREATE,student2@studentstudy.vn,Đặng Văn Nam,Admin@123,PLAYER,ACTIVE,Khoa Kinh Tế,0912345679`}
               className="w-full p-3 font-mono text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
             />
 
