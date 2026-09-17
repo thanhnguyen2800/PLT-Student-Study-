@@ -275,26 +275,22 @@ app.patch('/api/admin/users/:uid/role', (req, res) => {
 app.delete('/api/admin/users/:uid', async (req, res) => {
   try {
     const { uid } = req.params;
-    const { actorId, actorName } = req.body || {};
+    const { actorId } = req.body || {};
     const localTarget = dataStore.getUserById(uid);
-    if (localTarget) {
-      dataStore.assertCanManageUser(actorId, uid);
-    } else if (isFirestoreReady()) {
-      const users = await loadAllUsersFromFirestore();
-      const cloudTarget = users.find(user => user.uid === uid);
-      const actor = dataStore.getUserById(actorId);
-      if (!cloudTarget || !actor || actor.uid === cloudTarget.uid ||
-          (actor.role !== 'SUPER_ADMIN' && !(actor.role === 'ADMIN' && (cloudTarget.role === 'TEACHER' || cloudTarget.role === 'PLAYER')))) {
-        throw new Error('Bạn không có quyền khóa hoặc xóa tài khoản này');
-      }
-    } else {
-      dataStore.assertCanManageUser(actorId, uid);
+    const cloudUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
+    const actor = dataStore.getUserById(actorId) || cloudUsers.find(user => user.uid === actorId);
+    const target = localTarget || cloudUsers.find(user => user.uid === uid);
+    if (!actor || !target || actor.uid === target.uid ||
+        (actor.role !== 'SUPER_ADMIN' && !(actor.role === 'ADMIN' &&
+          (target.role === 'TEACHER' || target.role === 'PLAYER')))) {
+      throw new Error('Bạn không có quyền khóa hoặc xóa tài khoản này');
     }
-    const success = dataStore.deleteUser(uid, actorId);
-    if (!success) {
+
+    const deletedLocally = dataStore.deleteUser(uid, actorId);
+    const deletedFromFirestore = isFirestoreReady() && await deleteUserFromFirestore(uid);
+    if (!deletedLocally && !deletedFromFirestore) {
       return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });
     }
-    deleteUserFromFirestore(uid).catch(e => console.warn('[Firestore] Async delete user failed:', e));
     res.json({ success: true, message: 'Đã xóa người dùng thành công' });
   } catch (err: any) {
     res.status(500).json({ success: false, error: { message: err.message } });
