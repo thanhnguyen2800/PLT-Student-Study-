@@ -84,14 +84,14 @@ export function parseCSV(csvText: string): CSVParseResult {
         errors.push('Mật khẩu phải có độ dài ít nhất 6 ký tự');
       }
       if (!roleRaw) {
-        errors.push('Phân quyền (role) là bắt buộc khi CREATE (SUPER_ADMIN, ADMIN, TEACHER, PLAYER)');
+        errors.push('Phân quyền (role) là bắt buộc khi CREATE');
       } else if (!VALID_ROLES.includes(roleRaw as UserRole)) {
-        errors.push(`Role "${roleRaw}" không hợp lệ. Cho phép: ${VALID_ROLES.join(', ')}`);
+        errors.push(`Role "${roleRaw}" không hợp lệ`);
       }
     }
 
     if (roleRaw && !VALID_ROLES.includes(roleRaw as UserRole)) {
-      errors.push(`Role "${roleRaw}" không hợp lệ. Cho phép: ${VALID_ROLES.join(', ')}`);
+      errors.push(`Role "${roleRaw}" không hợp lệ`);
     }
 
     if (statusRaw && !VALID_STATUSES.includes(statusRaw as UserStatus)) {
