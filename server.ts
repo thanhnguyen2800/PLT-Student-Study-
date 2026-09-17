@@ -177,8 +177,6 @@ app.post('/api/admin/users', async (req, res) => {
         error: { code: 'VALIDATION_ERROR', message: 'Thiếu các thông tin bắt buộc (email, displayName, role)' },
       });
     }
-    dataStore.assertCanManageRole(actorId, role);
-
     const firestoreUser = isFirestoreReady() ? await getUserByEmailFromFirestore(email) : null;
     if (firestoreUser || (!isFirestoreReady() && dataStore.getUserByEmail(email))) {
       return res.status(409).json({

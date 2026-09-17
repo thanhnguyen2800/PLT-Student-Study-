@@ -623,7 +623,7 @@ export const AdminPage: React.FC = () => {
                   >
                     <option value="PLAYER">Học viên (Player)</option>
                     <option value="TEACHER">Giảng viên (Teacher)</option>
-                    {currentUser?.role === 'SUPER_ADMIN' && <option value="ADMIN">Quản trị viên (Admin)</option>}
+                    <option value="ADMIN">Quản trị viên (Admin)</option>
                     {currentUser?.role === 'SUPER_ADMIN' && <option value="SUPER_ADMIN">Super Admin</option>}
                   </select>
                 </div>

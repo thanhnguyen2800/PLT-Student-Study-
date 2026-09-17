@@ -74,7 +74,6 @@ async function saveFirebaseUser(user: UserProfile): Promise<UserProfile> {
 
 async function createFallbackUser(body: any): Promise<UserProfile> {
   const email = String(body.email || '').toLowerCase().trim();
-  dataStore.assertCanManageRole(body.actorId || body.actorUid, body.role);
   if (isFirebaseConfigured() && await getFirebaseUserByEmail(email)) {
     throw new Error(`Email "${email}" đã tồn tại trên hệ thống`);
   }

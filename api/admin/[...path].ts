@@ -20,31 +20,11 @@ async function findUserByEmail(email: string) {
   return firestoreUser || (!isFirestoreReady() ? dataStore.getUserByEmail(email) : null);
 }
 
-async function assertCanCreateRole(actorId: string | undefined, actorEmail: string | undefined, targetRole: UserRole) {
-  const localActor = actorId ? dataStore.getUserById(actorId) : null;
-  if (localActor) {
-    dataStore.assertCanManageRole(actorId, targetRole);
-    return;
-  }
-
-  const cloudActor = isFirestoreReady()
-    ? (await loadAllUsersFromFirestore()).find(user =>
-        user.uid === actorId || (actorEmail && user.email.toLowerCase() === actorEmail.toLowerCase().trim())
-      )
-    : null;
-    const actorRole = String(cloudActor?.role || '').toUpperCase();
-    if (!cloudActor || (actorRole !== 'SUPER_ADMIN' &&
-      !(actorRole === 'ADMIN' && (targetRole === 'TEACHER' || targetRole === 'PLAYER')))) {
-    throw new Error('Bạn không có quyền quản lý tài khoản với vai trò này');
-  }
-}
-
 async function createUser(body: any, actorId?: string, actorEmail?: string) {
   const { email, displayName, password, role, status, department, phone } = body;
   if (!email || !displayName || !role) {
     throw new Error('Thiếu các thông tin bắt buộc (email, displayName, role)');
   }
-  await assertCanCreateRole(actorId, actorEmail, role as UserRole);
   if (await findUserByEmail(email)) {
     const error: any = new Error(`Email "${email}" đã tồn tại trên hệ thống`);
     error.statusCode = 409;
