@@ -20,6 +20,20 @@ async function findUserByEmail(email: string) {
   return firestoreUser || (!isFirestoreReady() ? dataStore.getUserByEmail(email) : null);
 }
 
+async function assertCanDeleteUser(actorId: string | undefined, targetUid: string) {
+  const localActor = actorId ? dataStore.getUserById(actorId) : null;
+  const localTarget = dataStore.getUserById(targetUid);
+  const firestoreUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
+  const actor = localActor || firestoreUsers.find(user => user.uid === actorId);
+  const target = localTarget || firestoreUsers.find(user => user.uid === targetUid);
+
+  if (!actor || !target || actor.uid === target.uid ||
+      (actor.role !== 'SUPER_ADMIN' && !(actor.role === 'ADMIN' &&
+        (target.role === 'TEACHER' || target.role === 'PLAYER')))) {
+    throw new Error('Bạn không có quyền khóa hoặc xóa tài khoản này');
+  }
+}
+
 async function createUser(body: any, actorId?: string, actorEmail?: string) {
   const { email, displayName, password, role, status, department, phone } = body;
   if (!email || !displayName || !role) {
@@ -163,19 +177,7 @@ export default async function handler(req: any, res: any) {
 
     if (path.length === 2 && path[0] === 'users' && req.method === 'DELETE') {
       const uid = path[1];
-      const localTarget = dataStore.getUserById(uid);
-      if (localTarget) {
-        dataStore.assertCanManageUser(actorId, uid);
-      } else if (isFirestoreReady()) {
-        const cloudTarget = (await loadAllUsersFromFirestore()).find(user => user.uid === uid);
-        const actor = dataStore.getUserById(actorId);
-        if (!cloudTarget || !actor || actor.uid === cloudTarget.uid ||
-            (actor.role !== 'SUPER_ADMIN' && !(actor.role === 'ADMIN' && (cloudTarget.role === 'TEACHER' || cloudTarget.role === 'PLAYER')))) {
-          throw new Error('Bạn không có quyền khóa hoặc xóa tài khoản này');
-        }
-      } else {
-        dataStore.assertCanManageUser(actorId, uid);
-      }
+      await assertCanDeleteUser(actorId, uid);
       dataStore.deleteUser(uid, actorId);
       if (isFirestoreReady()) await deleteUserFromFirestore(uid);
       return json(res, 200, { success: true });
