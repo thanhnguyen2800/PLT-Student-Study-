@@ -25,6 +25,7 @@ async function createUser(body: any, actorId?: string) {
   if (!email || !displayName || !role) {
     throw new Error('Thiếu các thông tin bắt buộc (email, displayName, role)');
   }
+  dataStore.assertCanManageRole(actorId, role as UserRole);
   if (await findUserByEmail(email)) {
     const error: any = new Error(`Email "${email}" đã tồn tại trên hệ thống`);
     error.statusCode = 409;
@@ -153,6 +154,7 @@ export default async function handler(req: any, res: any) {
         return json(res, 200, { success: true, data: user });
       }
       if (path[2] === 'role' && (req.method === 'PATCH' || req.method === 'PUT')) {
+        dataStore.assertCanManageUser(actorId, uid);
         const user = dataStore.updateUser(uid, { role: req.body?.role }, actorId);
         if (isFirestoreReady()) await saveUserToFirestore(user);
         return json(res, 200, { success: true, data: user });

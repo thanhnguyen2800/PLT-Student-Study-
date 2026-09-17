@@ -281,7 +281,7 @@ export const AdminPage: React.FC = () => {
 
   const canManageUser = (user: User) => {
     if (!currentUser || currentUser.uid === user.uid) return false;
-    if (currentUser.role === 'SUPER_ADMIN') return user.role !== 'SUPER_ADMIN';
+    if (currentUser.role === 'SUPER_ADMIN') return true;
     return currentUser.role === 'ADMIN' && (user.role === 'TEACHER' || user.role === 'PLAYER');
   };
 
@@ -621,7 +621,7 @@ export const AdminPage: React.FC = () => {
                   >
                     <option value="PLAYER">Học viên (Player)</option>
                     <option value="TEACHER">Giảng viên (Teacher)</option>
-                    <option value="ADMIN">Quản trị viên (Admin)</option>
+                    {currentUser?.role === 'SUPER_ADMIN' && <option value="ADMIN">Quản trị viên (Admin)</option>}
                     {currentUser?.role === 'SUPER_ADMIN' && <option value="SUPER_ADMIN">Super Admin</option>}
                   </select>
                 </div>

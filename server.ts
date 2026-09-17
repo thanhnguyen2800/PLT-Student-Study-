@@ -177,6 +177,7 @@ app.post('/api/admin/users', async (req, res) => {
         error: { code: 'VALIDATION_ERROR', message: 'Thiếu các thông tin bắt buộc (email, displayName, role)' },
       });
     }
+    dataStore.assertCanManageRole(actorId, role);
 
     const firestoreUser = isFirestoreReady() ? await getUserByEmailFromFirestore(email) : null;
     if (firestoreUser || (!isFirestoreReady() && dataStore.getUserByEmail(email))) {
@@ -215,7 +216,7 @@ app.put('/api/admin/users/:uid', (req, res) => {
   try {
     const { uid } = req.params;
     const updates = req.body;
-    if (updates.status !== undefined) {
+    if (updates.status !== undefined || updates.role !== undefined) {
       dataStore.assertCanManageUser(updates.actorId || updates.actorUid, uid);
     }
     const updated = dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid);
@@ -230,7 +231,7 @@ app.patch('/api/admin/users/:uid', (req, res) => {
   try {
     const { uid } = req.params;
     const updates = req.body;
-    if (updates.status !== undefined) {
+    if (updates.status !== undefined || updates.role !== undefined) {
       dataStore.assertCanManageUser(updates.actorId || updates.actorUid, uid);
     }
     const updated = dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid);
@@ -264,7 +265,8 @@ app.patch('/api/admin/users/:uid/role', (req, res) => {
     if (!role) {
       return res.status(400).json({ success: false, error: { message: 'Vai trò không hợp lệ' } });
     }
-    const updated = dataStore.updateUser(uid, { role }, actorName || actorId || 'ADMIN');
+    dataStore.assertCanManageUser(actorId, uid);
+    const updated = dataStore.updateUser(uid, { role }, actorId);
     saveUserToFirestore(updated).catch(e => console.warn('[Firestore] Async update user role failed:', e));
     res.json({ success: true, data: updated });
   } catch (err: any) {

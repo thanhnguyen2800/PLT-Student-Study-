@@ -340,11 +340,21 @@ class DataStore {
     const target = this.users.get(targetUid);
     if (!actor || !target || actor.uid === target.uid) return false;
 
-    if (actor.role === 'SUPER_ADMIN') {
-      return target.role !== 'SUPER_ADMIN';
-    }
+    return this.canManageRole(actorUid, target.role);
+  }
 
-    return actor.role === 'ADMIN' && (target.role === 'TEACHER' || target.role === 'PLAYER');
+  public canManageRole(actorUid: string | undefined, targetRole: UserRole): boolean {
+    if (!actorUid) return false;
+    const actor = this.users.get(actorUid);
+    if (!actor) return false;
+    if (actor.role === 'SUPER_ADMIN') return true;
+    return actor.role === 'ADMIN' && (targetRole === 'TEACHER' || targetRole === 'PLAYER');
+  }
+
+  public assertCanManageRole(actorUid: string | undefined, targetRole: UserRole): void {
+    if (!this.canManageRole(actorUid, targetRole)) {
+      throw new Error('Bạn không có quyền quản lý tài khoản với vai trò này');
+    }
   }
 
   public assertCanManageUser(actorUid: string | undefined, targetUid: string): void {
