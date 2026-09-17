@@ -131,6 +131,7 @@ export const AdminPage: React.FC = () => {
           role: newUserRole,
           department: newUserDept,
           actorId: currentUser?.uid,
+          actorEmail: currentUser?.email,
           actorName: currentUser?.displayName,
         }),
       });
@@ -219,6 +220,7 @@ export const AdminPage: React.FC = () => {
         body: JSON.stringify({
           csvString: csvContent,
           actorId: currentUser?.uid,
+          actorEmail: currentUser?.email,
           actorName: currentUser?.displayName,
         }),
       });

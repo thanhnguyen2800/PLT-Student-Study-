@@ -20,7 +20,7 @@ async function findUserByEmail(email: string) {
   return firestoreUser || (!isFirestoreReady() ? dataStore.getUserByEmail(email) : null);
 }
 
-async function assertCanCreateRole(actorId: string | undefined, targetRole: UserRole) {
+async function assertCanCreateRole(actorId: string | undefined, actorEmail: string | undefined, targetRole: UserRole) {
   const localActor = actorId ? dataStore.getUserById(actorId) : null;
   if (localActor) {
     dataStore.assertCanManageRole(actorId, targetRole);
@@ -28,7 +28,9 @@ async function assertCanCreateRole(actorId: string | undefined, targetRole: User
   }
 
   const cloudActor = isFirestoreReady()
-    ? (await loadAllUsersFromFirestore()).find(user => user.uid === actorId)
+    ? (await loadAllUsersFromFirestore()).find(user =>
+        user.uid === actorId || (actorEmail && user.email.toLowerCase() === actorEmail.toLowerCase().trim())
+      )
     : null;
   if (!cloudActor || (cloudActor.role !== 'SUPER_ADMIN' &&
       !(cloudActor.role === 'ADMIN' && (targetRole === 'TEACHER' || targetRole === 'PLAYER')))) {
@@ -36,12 +38,12 @@ async function assertCanCreateRole(actorId: string | undefined, targetRole: User
   }
 }
 
-async function createUser(body: any, actorId?: string) {
+async function createUser(body: any, actorId?: string, actorEmail?: string) {
   const { email, displayName, password, role, status, department, phone } = body;
   if (!email || !displayName || !role) {
     throw new Error('Thiếu các thông tin bắt buộc (email, displayName, role)');
   }
-  await assertCanCreateRole(actorId, role as UserRole);
+  await assertCanCreateRole(actorId, actorEmail, role as UserRole);
   if (await findUserByEmail(email)) {
     const error: any = new Error(`Email "${email}" đã tồn tại trên hệ thống`);
     error.statusCode = 409;
@@ -69,7 +71,7 @@ async function createUser(body: any, actorId?: string) {
   return user;
 }
 
-async function importCsv(body: any, actorId?: string) {
+async function importCsv(body: any, actorId?: string, actorEmail?: string) {
   const csvContent = body.csvContent || body.csvString;
   if (!csvContent || typeof csvContent !== 'string') {
     const error: any = new Error('Vui lòng cung cấp nội dung file CSV hợp lệ');
@@ -94,7 +96,7 @@ async function importCsv(body: any, actorId?: string) {
           status: row.status || 'ACTIVE',
           department: row.department,
           phone: row.phone,
-        }, actorId);
+        }, actorId, actorEmail);
         created++;
       } else {
         const user = await findUserByEmail(row.email);
@@ -144,6 +146,7 @@ export default async function handler(req: any, res: any) {
       ? rawPath.flatMap(segment => String(segment).split('/')).filter(Boolean)
       : String(rawPath || '').split('/').filter(Boolean);
     const actorId = req.body?.actorId || req.body?.actorUid;
+    const actorEmail = req.body?.actorEmail;
 
     if (path.length === 1 && path[0] === 'users' && req.method === 'GET') {
       const firestoreUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
@@ -152,12 +155,12 @@ export default async function handler(req: any, res: any) {
     }
 
     if (path.length === 1 && path[0] === 'users' && req.method === 'POST') {
-      const user = await createUser(req.body || {}, actorId);
+      const user = await createUser(req.body || {}, actorId, actorEmail);
       return json(res, 201, { success: true, data: user });
     }
 
     if (path.length === 2 && path[0] === 'users' && path[1] === 'import-csv' && req.method === 'POST') {
-      const result = await importCsv(req.body || {}, actorId);
+      const result = await importCsv(req.body || {}, actorId, actorEmail);
       return json(res, 200, { success: true, data: result });
     }
 
