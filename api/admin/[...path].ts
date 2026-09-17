@@ -32,8 +32,9 @@ async function assertCanCreateRole(actorId: string | undefined, actorEmail: stri
         user.uid === actorId || (actorEmail && user.email.toLowerCase() === actorEmail.toLowerCase().trim())
       )
     : null;
-  if (!cloudActor || (cloudActor.role !== 'SUPER_ADMIN' &&
-      !(cloudActor.role === 'ADMIN' && (targetRole === 'TEACHER' || targetRole === 'PLAYER')))) {
+    const actorRole = String(cloudActor?.role || '').toUpperCase();
+    if (!cloudActor || (actorRole !== 'SUPER_ADMIN' &&
+      !(actorRole === 'ADMIN' && (targetRole === 'TEACHER' || targetRole === 'PLAYER')))) {
     throw new Error('Bạn không có quyền quản lý tài khoản với vai trò này');
   }
 }

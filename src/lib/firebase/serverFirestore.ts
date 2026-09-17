@@ -209,8 +209,12 @@ export async function loadAllUsersFromFirestore(): Promise<UserProfile[]> {
     const users: UserProfile[] = [];
     snap.forEach(docSnap => {
       const data = docSnap.data() as UserProfile;
-      if (data && data.uid) {
-        users.push(data);
+      if (data) {
+        users.push({
+          ...data,
+          uid: data.uid || docSnap.id,
+          role: String(data.role || '').toUpperCase() as UserProfile['role'],
+        });
       }
     });
     return users;
