@@ -254,9 +254,9 @@ class DataStore {
     department?: string;
     phone?: string;
     createdBy?: string;
-  }): UserProfile {
+  }, options?: { ignoreExistingEmail?: boolean }): UserProfile {
     const existing = this.getUserByEmail(data.email);
-    if (existing) {
+    if (existing && !options?.ignoreExistingEmail) {
       throw new Error(`Email "${data.email}" đã tồn tại trên hệ thống`);
     }
 

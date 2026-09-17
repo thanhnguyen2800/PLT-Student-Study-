@@ -40,7 +40,7 @@ async function createUser(body: any, actorId?: string) {
     department,
     phone,
     createdBy: actorId || 'ADMIN',
-  });
+  }, { ignoreExistingEmail: isFirestoreReady() });
   user.passwordHash = createHash('sha256').update(String(password || 'Student@123').trim()).digest('hex');
 
   if (isFirestoreReady() && !(await saveUserToFirestore(user))) {

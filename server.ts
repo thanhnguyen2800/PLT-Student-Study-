@@ -362,7 +362,7 @@ const handleCsvImportRequest = async (req: any, res: any) => {
             department: row.department,
             phone: row.phone,
             createdBy: actorUid,
-          });
+          }, { ignoreExistingEmail: isFirestoreReady() });
           if (isFirestoreReady() && !(await saveUserToFirestore(newUser))) {
             dataStore.deleteUser(newUser.uid);
             throw new Error('Không thể lưu tài khoản vào Firebase');
