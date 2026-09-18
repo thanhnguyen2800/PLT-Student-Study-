@@ -190,6 +190,19 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
     }
   }
 
+  if (path === '/api/auth/session' && method === 'GET') {
+    const authorization = String(init?.headers && new Headers(init.headers).get('Authorization') || '');
+    const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+    const uid = token.match(/^token_([^_]+)_\d+$/)?.[1];
+    const user = uid
+      ? (isFirebaseConfigured() ? await getFirebaseUserById(uid) : dataStore.getUserById(uid))
+      : null;
+    if (!user || user.status === 'DISABLED' || user.status === 'LOCKED') {
+      return makeJsonResponse({ success: false, error: { message: 'Tài khoản không còn hoạt động' } }, 401);
+    }
+    return makeJsonResponse({ success: true, data: { user } });
+  }
+
   // 2. Health & Status
   if (path === '/api/health' || path === '/api/firebase/status') {
     return makeJsonResponse({

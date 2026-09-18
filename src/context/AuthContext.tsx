@@ -23,7 +23,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    try {
+    const restoreSession = async () => {
       const storedUser = localStorage.getItem(AUTH_STORAGE_KEY);
       const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
 
@@ -34,19 +34,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUser(null);
         setToken(null);
       } else if (storedUser && storedToken) {
-        setCurrentUser(JSON.parse(storedUser));
-        setToken(storedToken);
+        try {
+          const response = await fetch('/api/auth/session', {
+            headers: { Authorization: `Bearer ${storedToken}` },
+          });
+          const json = await response.json();
+          if (!response.ok || !json.success || !json.data?.user) {
+            throw new Error('Phiên đăng nhập không còn hợp lệ');
+          }
+          setCurrentUser(json.data.user);
+          setToken(storedToken);
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(json.data.user));
+        } catch {
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+          localStorage.removeItem(TOKEN_STORAGE_KEY);
+          setCurrentUser(null);
+          setToken(null);
+        }
       } else {
         setCurrentUser(null);
         setToken(null);
       }
-    } catch (e) {
+    };
+
+    restoreSession().catch((e) => {
       console.warn('Error reading auth state', e);
       setCurrentUser(null);
       setToken(null);
-    } finally {
+    }).finally(() => {
       setIsLoading(false);
-    }
+    });
   }, []);
 
   const login = async (email: string, password: string) => {

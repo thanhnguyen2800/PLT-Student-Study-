@@ -124,6 +124,24 @@ app.post('/api/auth/login', (req, res) => {
   }
 });
 
+app.get('/api/auth/session', async (req, res) => {
+  try {
+    const authorization = String(req.headers.authorization || '');
+    const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+    const uid = token.match(/^token_([^_]+)_\d+$/)?.[1];
+    if (!uid) return res.status(401).json({ success: false, error: { message: 'Phiên đăng nhập không hợp lệ' } });
+
+    const firestoreUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
+    const user = firestoreUsers.find(item => item.uid === uid) || dataStore.getUserById(uid);
+    if (!user || user.status === 'DISABLED' || user.status === 'LOCKED') {
+      return res.status(401).json({ success: false, error: { message: 'Tài khoản không còn hoạt động' } });
+    }
+    return res.json({ success: true, data: { user } });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: { message: error.message || 'Không thể kiểm tra phiên' } });
+  }
+});
+
 // -----------------------------------------------------------------------------
 // Admin Endpoints
 // -----------------------------------------------------------------------------
