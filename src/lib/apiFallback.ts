@@ -321,6 +321,9 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
         users.sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
         result = { users, total: users.length, page: 1, totalPages: 1 };
       } catch (error) {
+        if (isFirebaseConfigured()) {
+          return makeJsonResponse({ success: false, error: { message: 'Không thể đọc danh sách tài khoản từ Firebase' } }, 503);
+        }
         console.warn('[Client API] Không thể đọc users từ Firestore, dùng dữ liệu cục bộ:', error);
       }
     }

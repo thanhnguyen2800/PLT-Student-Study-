@@ -100,8 +100,13 @@ async function importCsv(body: any, actorId?: string, actorEmail?: string) {
           throw new Error('Bạn không có quyền thay đổi tài khoản này');
         }
         if (row.action === 'DELETE') {
-          dataStore.deleteUser(user.uid, actorId);
-          if (isFirestoreReady()) await deleteUserFromFirestore(user.uid);
+          if (isFirestoreReady()) {
+            if (!(await deleteUserFromFirestore(user.uid))) {
+              throw new Error('Không thể xóa tài khoản khỏi Firebase');
+            }
+          } else {
+            dataStore.deleteUser(user.uid, actorId);
+          }
           deleted++;
         } else {
           const updatedUser = dataStore.updateUser(user.uid, {
@@ -178,8 +183,14 @@ export default async function handler(req: any, res: any) {
     if (path.length === 2 && path[0] === 'users' && req.method === 'DELETE') {
       const uid = path[1];
       await assertCanDeleteUser(actorId, uid);
-      dataStore.deleteUser(uid, actorId);
-      if (isFirestoreReady()) await deleteUserFromFirestore(uid);
+      if (isFirestoreReady()) {
+        if (!(await deleteUserFromFirestore(uid))) {
+          throw new Error('Không thể xóa tài khoản khỏi Firebase');
+        }
+        dataStore.deleteUser(uid, actorId);
+      } else {
+        dataStore.deleteUser(uid, actorId);
+      }
       return json(res, 200, { success: true });
     }
 

@@ -165,7 +165,7 @@ app.get('/api/admin/users', async (req, res) => {
         && (!role || user.role === role)
         && (!status || user.status === status);
     });
-    const users = firestoreUsers.length > 0 ? filteredUsers : result.users;
+    const users = isFirestoreReady() ? filteredUsers : result.users;
     res.json({
       success: true,
       data: users,
@@ -205,7 +205,7 @@ app.post('/api/admin/users', async (req, res) => {
       department,
       phone,
       createdBy: actorName || createdBy || actorId || 'ADMIN',
-    });
+    }, { ignoreExistingEmail: isFirestoreReady() });
     newUser.passwordHash = createHash('sha256').update(String(password || 'Student@123').trim()).digest('hex');
 
     if (isFirestoreReady() && !(await saveUserToFirestore(newUser))) {
@@ -297,11 +297,13 @@ app.delete('/api/admin/users/:uid', async (req, res) => {
       throw new Error('Bạn không có quyền khóa hoặc xóa tài khoản này');
     }
 
-    const deletedLocally = dataStore.deleteUser(uid, actorId);
-    const deletedFromFirestore = isFirestoreReady() && await deleteUserFromFirestore(uid);
-    if (!deletedLocally && !deletedFromFirestore) {
+    const deleted = isFirestoreReady()
+      ? await deleteUserFromFirestore(uid)
+      : dataStore.deleteUser(uid, actorId);
+    if (!deleted) {
       return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });
     }
+    if (isFirestoreReady()) dataStore.deleteUser(uid, actorId);
     res.json({ success: true, message: 'Đã xóa người dùng thành công' });
   } catch (err: any) {
     res.status(500).json({ success: false, error: { message: err.message } });

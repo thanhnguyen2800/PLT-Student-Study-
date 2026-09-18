@@ -192,6 +192,11 @@ export async function deleteUserFromFirestore(uid: string): Promise<boolean> {
   try {
     const userRef = doc(db, 'users', uid);
     await deleteDoc(userRef);
+    const deletedSnapshot = await getDoc(userRef);
+    if (deletedSnapshot.exists()) {
+      console.error(`[Firebase Server] User ${uid} still exists after delete`);
+      return false;
+    }
     return true;
   } catch (err) {
     console.error(`[Firebase Server] Error deleting user ${uid} from Firestore:`, err);
