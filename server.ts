@@ -128,7 +128,7 @@ app.get('/api/auth/session', async (req, res) => {
   try {
     const authorization = String(req.headers.authorization || '');
     const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
-    const uid = token.match(/^token_([^_]+)_\d+$/)?.[1];
+    const uid = token.match(/^token_([^_]+)(?:_\d+)?$/)?.[1];
     if (!uid) return res.status(401).json({ success: false, error: { message: 'Phiên đăng nhập không hợp lệ' } });
 
     const firestoreUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
