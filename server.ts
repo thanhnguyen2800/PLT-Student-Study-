@@ -86,36 +86,27 @@ app.post('/api/auth/login', (req, res) => {
       return { user };
     };
 
-    const authResult = dataStore.authenticate(email, password);
-    if (!authResult) {
-      return authenticateCloudUser().then(cloudResult => {
-        if (!cloudResult) {
-          return res.status(401).json({
-            success: false,
-            error: { code: 'AUTH_FAILED', message: 'Email hoặc mật khẩu không chính xác' },
-          });
-        }
-        return res.json({
-          success: true,
-          data: { user: cloudResult.user, token: 'token_' + cloudResult.user.uid + '_' + Date.now() },
+    const authenticate = async () => {
+      const localAuthResult = isFirestoreReady() ? null : dataStore.authenticate(email, password);
+      const authResult = isFirestoreReady()
+        ? await authenticateCloudUser()
+        : localAuthResult;
+      if (!authResult) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'AUTH_FAILED', message: 'Email hoặc mật khẩu không chính xác' },
         });
-      }).catch(error => res.status(500).json({ success: false, error: { message: error.message || 'Không thể đăng nhập' } }));
-    }
-
-    if (!authResult) {
-      return res.status(401).json({
-        success: false,
-        error: { code: 'AUTH_FAILED', message: 'Email hoặc mật khẩu không chính xác' },
+      }
+      return res.json({
+        success: true,
+        data: { user: authResult.user, token: 'token_' + authResult.user.uid + '_' + Date.now() },
       });
-    }
+    };
 
-    res.json({
-      success: true,
-      data: {
-        user: authResult.user,
-        token: 'token_' + authResult.user.uid + '_' + Date.now(),
-      },
-    });
+    authenticate().catch(error => res.status(500).json({
+      success: false,
+      error: { message: error.message || 'Không thể đăng nhập' },
+    }));
   } catch (error: any) {
     res.status(403).json({
       success: false,
@@ -132,7 +123,9 @@ app.get('/api/auth/session', async (req, res) => {
     if (!uid) return res.status(401).json({ success: false, error: { message: 'Phiên đăng nhập không hợp lệ' } });
 
     const firestoreUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
-    const user = firestoreUsers.find(item => item.uid === uid) || dataStore.getUserById(uid);
+    const user = isFirestoreReady()
+      ? firestoreUsers.find(item => item.uid === uid)
+      : dataStore.getUserById(uid);
     if (!user || user.status === 'DISABLED' || user.status === 'LOCKED') {
       return res.status(401).json({ success: false, error: { message: 'Tài khoản không còn hoạt động' } });
     }
@@ -1138,13 +1131,16 @@ async function initFirestoreBackendSync() {
     if (cloudUsers && cloudUsers.length > 0) {
       console.log(`[Firestore Sync] Loaded ${cloudUsers.length} users from Cloud Firestore.`);
       dataStore.setUsers(cloudUsers);
-    } else {
+    } else if (process.env.SEED_INITIAL_USERS === 'true') {
       const localUsers = dataStore.getAllUsers();
       console.log(`[Firestore Sync] Seeding ${localUsers.length} initial users to Cloud Firestore...`);
       for (const u of localUsers) {
         await saveUserToFirestore(u);
       }
       console.log('[Firestore Sync] Initial users saved to Cloud Firestore.');
+    } else {
+      console.log('[Firestore Sync] No cloud users found; keeping the user collection empty.');
+      dataStore.setUsers([]);
     }
 
     // Load attempts

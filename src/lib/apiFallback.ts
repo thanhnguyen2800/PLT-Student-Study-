@@ -151,7 +151,7 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
   if (path === '/api/auth/login' && method === 'POST') {
     try {
       const { email, password } = body;
-      const res = dataStore.authenticate(email, password);
+      const res = isFirebaseConfigured() ? null : dataStore.authenticate(email, password);
       if (res) {
         return makeJsonResponse({
           success: true,

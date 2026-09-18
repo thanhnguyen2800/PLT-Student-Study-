@@ -14,7 +14,9 @@ export default async function handler(req: any, res: any) {
     const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
     const uid = token.match(/^token_([^_]+)(?:_\d+)?$/)?.[1];
     const firestoreUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
-    const user = firestoreUsers.find(item => item.uid === uid) || (uid ? dataStore.getUserById(uid) : null);
+    const user = isFirestoreReady()
+      ? firestoreUsers.find(item => item.uid === uid)
+      : (uid ? dataStore.getUserById(uid) : null);
 
     if (!user || user.status === 'DISABLED' || user.status === 'LOCKED') {
       return res.status(401).json({ success: false, error: { message: 'Tài khoản không còn hoạt động' } });

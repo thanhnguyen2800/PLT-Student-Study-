@@ -1111,6 +1111,8 @@ class DataStore {
   }
 
   public setUsers(users: UserProfile[]) {
+    this.users.clear();
+    this.userPasswords.clear();
     users.forEach(u => this.users.set(u.uid, u));
   }
 
