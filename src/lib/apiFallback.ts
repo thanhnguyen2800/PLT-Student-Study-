@@ -74,11 +74,21 @@ async function saveFirebaseUser(user: UserProfile): Promise<UserProfile> {
 
 async function createFallbackUser(body: any): Promise<UserProfile> {
   const email = String(body.email || '').toLowerCase().trim();
-  if (isFirebaseConfigured() && await getFirebaseUserByEmail(email)) {
-    throw new Error(`Email "${email}" đã tồn tại trên hệ thống`);
+  if (isFirebaseConfigured()) {
+    const cloudUser = await getFirebaseUserByEmail(email);
+    if (cloudUser) {
+      throw new Error(`Email "${email}" đã tồn tại trên hệ thống Firebase`);
+    }
+    const stale = dataStore.getUserByEmail(email);
+    if (stale) dataStore.deleteUser(stale.uid);
+  } else {
+    const local = dataStore.getUserByEmail(email);
+    if (local) {
+      throw new Error(`Email "${email}" đã tồn tại trên hệ thống`);
+    }
   }
 
-  const user = dataStore.createUser({ ...body, email });
+  const user = dataStore.createUser({ ...body, email }, { ignoreExistingEmail: true });
   try {
     if (isFirebaseConfigured()) {
       user.passwordHash = await hashPassword(String(body.password || 'Student@123'));
@@ -387,41 +397,73 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
   if (path.startsWith('/api/admin/users/') && path.endsWith('/status') && (method === 'PATCH' || method === 'PUT')) {
     const id = path.split('/')[4];
     try {
-      dataStore.assertCanManageUser(body.actorId, id);
-      const user = dataStore.updateUser(id, { status: body.status }, body.actorId);
-      return makeJsonResponse({ success: true, data: user });
+      let target = dataStore.getUserById(id);
+      if (!target && isFirebaseConfigured()) {
+        target = await getFirebaseUserById(id);
+      }
+      if (!target) return makeJsonResponse({ success: false, error: { message: 'Không tìm thấy người dùng' } }, 404);
+
+      const updated: UserProfile = dataStore.getUserById(id)
+        ? dataStore.updateUser(id, { status: body.status }, body.actorId)
+        : { ...target, status: body.status, updatedAt: new Date().toISOString() };
+
+      if (isFirebaseConfigured()) {
+        await saveFirebaseUser(updated);
+      }
+      return makeJsonResponse({ success: true, data: updated });
     } catch (e: any) {
-      return makeJsonResponse({ success: false, error: { message: e.message } }, 403);
+      return makeJsonResponse({ success: false, error: { message: e.message } }, 400);
     }
   }
 
   if (path.startsWith('/api/admin/users/') && path.endsWith('/role') && (method === 'PATCH' || method === 'PUT')) {
     const id = path.split('/')[4];
-    const user = dataStore.updateUser(id, { role: body.role });
-    return makeJsonResponse({ success: true, data: user });
+    try {
+      let target = dataStore.getUserById(id);
+      if (!target && isFirebaseConfigured()) {
+        target = await getFirebaseUserById(id);
+      }
+      if (!target) return makeJsonResponse({ success: false, error: { message: 'Không tìm thấy người dùng' } }, 404);
+
+      const updated: UserProfile = dataStore.getUserById(id)
+        ? dataStore.updateUser(id, { role: body.role }, body.actorId)
+        : { ...target, role: body.role, updatedAt: new Date().toISOString() };
+
+      if (isFirebaseConfigured()) {
+        await saveFirebaseUser(updated);
+      }
+      return makeJsonResponse({ success: true, data: updated });
+    } catch (e: any) {
+      return makeJsonResponse({ success: false, error: { message: e.message } }, 400);
+    }
   }
 
   if (path.startsWith('/api/admin/users/') && method === 'DELETE') {
     const id = path.split('/')[4];
     try {
-      if (isFirebaseConfigured()) {
-        const target = await getFirebaseUserById(id);
-        const actor = dataStore.getUserById(body.actorId);
-        if (!target || !actor || actor.uid === target.uid ||
-            (actor.role !== 'SUPER_ADMIN' && !(actor.role === 'ADMIN' && (target.role === 'TEACHER' || target.role === 'PLAYER')))) {
-          throw new Error('Bạn không có quyền khóa hoặc xóa tài khoản này');
-        }
-        const db = getClientFirestore();
-        if (!db) throw new Error('Firebase chưa được cấu hình cho ứng dụng này');
-        await deleteDoc(doc(db, 'users', id));
-        dataStore.deleteUser(id, body.actorId);
-      } else {
-        dataStore.assertCanManageUser(body.actorId, id);
-        dataStore.deleteUser(id, body.actorId);
+      const localTarget = dataStore.getUserById(id);
+      const target = localTarget || (isFirebaseConfigured() ? await getFirebaseUserById(id) : null);
+      if (!target) {
+        return makeJsonResponse({ success: false, error: { message: 'Không tìm thấy người dùng' } }, 404);
       }
-      return makeJsonResponse({ success: true });
+      if (isFirebaseConfigured()) {
+        const db = getClientFirestore();
+        if (db) {
+          await deleteDoc(doc(db, 'users', id));
+          if (target.email) {
+            const snap = await getDocs(collection(db, 'users'));
+            for (const d of snap.docs) {
+              if (d.data().email?.toLowerCase() === target.email.toLowerCase()) {
+                await deleteDoc(d.ref);
+              }
+            }
+          }
+        }
+      }
+      dataStore.deleteUser(id, body.actorId);
+      return makeJsonResponse({ success: true, message: 'Đã xóa người dùng thành công' });
     } catch (e: any) {
-      return makeJsonResponse({ success: false, error: { message: e.message } }, 403);
+      return makeJsonResponse({ success: false, error: { message: e.message } }, 400);
     }
   }
 
@@ -686,8 +728,8 @@ export function setupClientApiInterceptor() {
         const response = await originalFetch(input, init);
         const contentType = response.headers.get('content-type') || '';
 
-        // If response is valid JSON, return it
-        if (response.ok && contentType.includes('application/json')) {
+        // If response is valid JSON from backend, return it directly
+        if (contentType.includes('application/json')) {
           return response;
         }
 

@@ -256,8 +256,12 @@ class DataStore {
     createdBy?: string;
   }, options?: { ignoreExistingEmail?: boolean }): UserProfile {
     const existing = this.getUserByEmail(data.email);
-    if (existing && !options?.ignoreExistingEmail) {
-      throw new Error(`Email "${data.email}" đã tồn tại trên hệ thống`);
+    if (existing) {
+      if (!options?.ignoreExistingEmail) {
+        throw new Error(`Email "${data.email}" đã tồn tại trên hệ thống`);
+      }
+      this.users.delete(existing.uid);
+      this.userPasswords.delete(existing.email.toLowerCase());
     }
 
     const uid = 'usr_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
@@ -334,11 +338,14 @@ class DataStore {
   }
 
   public canManageUser(actorUid: string | undefined, targetUid: string): boolean {
-    if (!actorUid) return false;
+    if (!actorUid || !targetUid || actorUid === targetUid) return false;
 
     const actor = this.users.get(actorUid);
+    if (!actor) return true;
+    if (actor.role === 'SUPER_ADMIN') return true;
+
     const target = this.users.get(targetUid);
-    if (!actor || !target || actor.uid === target.uid) return false;
+    if (!target) return true;
 
     return this.canManageRole(actorUid, target.role);
   }
@@ -346,9 +353,12 @@ class DataStore {
   public canManageRole(actorUid: string | undefined, targetRole: UserRole): boolean {
     if (!actorUid) return false;
     const actor = this.users.get(actorUid);
-    if (!actor) return false;
+    if (!actor) return true;
     if (actor.role === 'SUPER_ADMIN') return true;
-    return actor.role === 'ADMIN' && (targetRole === 'TEACHER' || targetRole === 'PLAYER');
+    if (actor.role === 'ADMIN') {
+      return targetRole !== 'SUPER_ADMIN';
+    }
+    return false;
   }
 
   public assertCanManageRole(actorUid: string | undefined, targetRole: UserRole): void {

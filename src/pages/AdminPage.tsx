@@ -41,6 +41,11 @@ export const AdminPage: React.FC = () => {
   const [csvContent, setCsvContent] = useState('');
   const [csvResult, setCsvResult] = useState<{ imported: number; errors: string[] } | null>(null);
 
+  // User Actions State
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<User | null>(null);
+  const [actionLoadingUid, setActionLoadingUid] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [firebaseInfo, setFirebaseInfo] = useState<{
@@ -120,14 +125,15 @@ export const AdminPage: React.FC = () => {
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    setActionFeedback(null);
     try {
       const res = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: newUserEmail,
+          email: newUserEmail.trim(),
           password: newUserPassword,
-          displayName: newUserName,
+          displayName: newUserName.trim(),
           role: newUserRole,
           department: newUserDept,
           actorId: currentUser?.uid,
@@ -140,18 +146,21 @@ export const AdminPage: React.FC = () => {
         setShowCreateModal(false);
         setNewUserEmail('');
         setNewUserName('');
-        fetchUsers();
+        setActionFeedback({ type: 'success', message: `Đã tạo tài khoản "${newUserName.trim() || newUserEmail.trim()}" thành công!` });
+        await fetchUsers();
         fetchLogs();
       } else {
-        alert(json.error?.message || 'Không thể tạo người dùng');
+        setActionFeedback({ type: 'error', message: json.error?.message || 'Không thể tạo người dùng' });
       }
     } catch (e: any) {
-      alert(e.message || 'Lỗi khi tạo người dùng');
+      setActionFeedback({ type: 'error', message: e.message || 'Lỗi kết nối khi tạo người dùng' });
     }
   };
 
   const handleToggleStatus = async (user: User) => {
     const nextStatus: UserStatus = user.status === 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
+    setActionLoadingUid(user.uid);
+    setActionFeedback(null);
     try {
       const res = await fetch(`/api/admin/users/${user.uid}/status`, {
         method: 'PATCH',
@@ -162,12 +171,24 @@ export const AdminPage: React.FC = () => {
           actorName: currentUser?.displayName,
         }),
       });
-      if (res.ok) {
-        fetchUsers();
+      const json = await res.json();
+      if (json.success) {
+        setActionFeedback({
+          type: 'success',
+          message: `Đã ${nextStatus === 'LOCKED' ? 'khóa' : 'mở khóa'} tài khoản "${user.email}" thành công!`,
+        });
+        await fetchUsers();
         fetchLogs();
+      } else {
+        setActionFeedback({
+          type: 'error',
+          message: json.error?.message || 'Không thể thay đổi trạng thái tài khoản',
+        });
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setActionFeedback({ type: 'error', message: e.message || 'Lỗi khi cập nhật trạng thái' });
+    } finally {
+      setActionLoadingUid(null);
     }
   };
 
@@ -191,8 +212,13 @@ export const AdminPage: React.FC = () => {
     }
   };
 
-  const handleDeleteUser = async (user: User) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn tài khoản: ${user.email}?`)) return;
+  const handleDeleteUser = (user: User) => {
+    setConfirmDeleteUser(user);
+  };
+
+  const handleExecuteDelete = async (user: User) => {
+    setActionLoadingUid(user.uid);
+    setActionFeedback(null);
     try {
       const res = await fetch(`/api/admin/users/${user.uid}`, {
         method: 'DELETE',
@@ -202,12 +228,25 @@ export const AdminPage: React.FC = () => {
           actorName: currentUser?.displayName,
         }),
       });
-      if (res.ok) {
-        fetchUsers();
+      const json = await res.json();
+      if (json.success) {
+        setConfirmDeleteUser(null);
+        setActionFeedback({
+          type: 'success',
+          message: `Đã xóa vĩnh viễn tài khoản "${user.email}" khỏi hệ thống thành công!`,
+        });
+        await fetchUsers();
         fetchLogs();
+      } else {
+        setActionFeedback({
+          type: 'error',
+          message: json.error?.message || 'Không thể xóa tài khoản',
+        });
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setActionFeedback({ type: 'error', message: e.message || 'Lỗi kết nối khi xóa tài khoản' });
+    } finally {
+      setActionLoadingUid(null);
     }
   };
 
@@ -282,9 +321,16 @@ export const AdminPage: React.FC = () => {
   });
 
   const canManageUser = (user: User) => {
-    if (!currentUser || currentUser.uid === user.uid) return false;
-    if (currentUser.role === 'SUPER_ADMIN') return true;
-    return currentUser.role === 'ADMIN' && (user.role === 'TEACHER' || user.role === 'PLAYER');
+    if (!currentUser) return false;
+    const isSelf = currentUser.uid === user.uid || (currentUser.email && user.email && currentUser.email.toLowerCase() === user.email.toLowerCase());
+    if (isSelf) return false;
+    const actorRole = (currentUser.role || '').toUpperCase();
+    const targetRole = (user.role || '').toUpperCase();
+    if (actorRole === 'SUPER_ADMIN') return true;
+    if (actorRole === 'ADMIN') {
+      return targetRole !== 'SUPER_ADMIN';
+    }
+    return false;
   };
 
   return (
@@ -343,6 +389,31 @@ export const AdminPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Action Notification Banner */}
+      {actionFeedback && (
+        <div className={`p-3.5 rounded-2xl text-xs flex items-center justify-between border shadow-xs animate-in fade-in ${
+          actionFeedback.type === 'success'
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+            : 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300'
+        }`}>
+          <div className="flex items-center gap-2">
+            {actionFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span className="font-semibold">{actionFeedback.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionFeedback(null)}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold px-2 py-0.5 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* --- TAB 1: USERS MANAGEMENT --- */}
       {activeTab === 'USERS' && (
@@ -467,28 +538,51 @@ export const AdminPage: React.FC = () => {
                         </td>
 
                         <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {canManageUser(user) && (
+                          <div className="flex items-center justify-end gap-1.5">
+                            {canManageUser(user) ? (
                               <>
                                 <button
+                                  type="button"
+                                  id={`btn-toggle-status-${user.uid}`}
                                   onClick={() => handleToggleStatus(user)}
-                                  title={user.status === 'ACTIVE' ? 'Khóa tài khoản' : 'Kích hoạt lại'}
-                                  className={`p-1.5 rounded-lg border text-xs cursor-pointer ${
+                                  disabled={actionLoadingUid === user.uid}
+                                  title={user.status === 'ACTIVE' ? 'Khóa tài khoản này' : 'Kích hoạt lại tài khoản này'}
+                                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50 ${
                                     user.status === 'ACTIVE'
-                                      ? 'border-amber-200 text-amber-600 hover:bg-amber-50'
-                                      : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
+                                      ? 'border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-400'
+                                      : 'border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400'
                                   }`}
                                 >
-                                  {user.status === 'ACTIVE' ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                                  {user.status === 'ACTIVE' ? (
+                                    <>
+                                      <Lock className="w-3.5 h-3.5" />
+                                      <span>Khóa</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Unlock className="w-3.5 h-3.5" />
+                                      <span>Mở khóa</span>
+                                    </>
+                                  )}
                                 </button>
-                              <button
-                                onClick={() => handleDeleteUser(user)}
-                                title="Xóa vĩnh viễn tài khoản"
-                                className="p-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                                <button
+                                  type="button"
+                                  id={`btn-delete-user-${user.uid}`}
+                                  onClick={() => handleDeleteUser(user)}
+                                  disabled={actionLoadingUid === user.uid}
+                                  title="Xóa vĩnh viễn tài khoản khỏi Firebase và hệ thống"
+                                  className="px-2.5 py-1.5 rounded-lg border border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-400 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Xóa</span>
+                                </button>
                               </>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 dark:text-slate-500 italic px-2 py-1">
+                                {currentUser?.uid === user.uid || (currentUser?.email && user.email && currentUser.email.toLowerCase() === user.email.toLowerCase())
+                                  ? '(Chính bạn)'
+                                  : '--'}
+                              </span>
                             )}
                           </div>
                         </td>
@@ -741,6 +835,71 @@ export const AdminPage: React.FC = () => {
                 className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold"
               >
                 Tiến hành Nhập dữ liệu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Modal */}
+      {confirmDeleteUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-950/50 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900 dark:text-white">Xác nhận xóa tài khoản vĩnh viễn</h3>
+                <p className="text-xs text-slate-500">Tài khoản này sẽ bị xóa khỏi Firebase và hệ thống hoàn toàn</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 text-xs space-y-2">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Họ và tên:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{confirmDeleteUser.displayName || 'Chưa đặt tên'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Email:</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{confirmDeleteUser.email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Vai trò:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{confirmDeleteUser.role}</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800">
+              💡 Lưu ý: Sau khi xóa, bạn hoặc quản trị viên có thể tạo lại tài khoản với email này bất kỳ lúc nào mà không bị báo lỗi "đã tồn tại".
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={actionLoadingUid === confirmDeleteUser.uid}
+                onClick={() => setConfirmDeleteUser(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={actionLoadingUid === confirmDeleteUser.uid}
+                onClick={() => handleExecuteDelete(confirmDeleteUser)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {actionLoadingUid === confirmDeleteUser.uid ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xác nhận xóa</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

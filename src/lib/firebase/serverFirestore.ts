@@ -188,16 +188,16 @@ export async function getUserByEmailFromFirestore(email: string): Promise<UserPr
 
 export async function removeOrphanedUserByEmail(email: string): Promise<boolean> {
   const auth = getAdminAuth();
-  if (!auth) return false;
-
-  try {
-    await auth.getUserByEmail(email.trim().toLowerCase());
-    return false;
-  } catch (error: any) {
-    if (error?.code !== 'auth/user-not-found') throw error;
-    const firestoreUser = await getUserByEmailFromFirestore(email);
-    return firestoreUser ? deleteUserFromFirestore(firestoreUser.uid) : false;
+  if (auth) {
+    try {
+      await auth.getUserByEmail(email.trim().toLowerCase());
+      return false;
+    } catch (error: any) {
+      if (error?.code !== 'auth/user-not-found') throw error;
+    }
   }
+  const firestoreUser = await getUserByEmailFromFirestore(email);
+  return firestoreUser ? deleteUserFromFirestore(firestoreUser.uid, email) : false;
 }
 
 export async function deleteUserFromFirebase(uid: string, email?: string): Promise<boolean> {
@@ -211,29 +211,42 @@ export async function deleteUserFromFirebase(uid: string, email?: string): Promi
     } catch (error: any) {
       if (error?.code !== 'auth/user-not-found') {
         console.error(`[Firebase Admin] Error deleting auth user ${uid}:`, error);
-        return false;
       }
     }
   }
 
-  return deleteUserFromFirestore(uid);
+  return deleteUserFromFirestore(uid, email);
 }
 
-export async function deleteUserFromFirestore(uid: string): Promise<boolean> {
+export async function deleteUserFromFirestore(uid: string, email?: string): Promise<boolean> {
   const db = getBackendFirestore();
-  if (!db || !uid) return false;
+  if (!db) return false;
 
+  let anyDeleted = false;
   try {
-    const userRef = doc(db, 'users', uid);
-    await deleteDoc(userRef);
-    const deletedSnapshot = await getDoc(userRef);
-    if (deletedSnapshot.exists()) {
-      console.error(`[Firebase Server] User ${uid} still exists after delete`);
-      return false;
+    if (uid) {
+      const userRef = doc(db, 'users', uid);
+      await deleteDoc(userRef);
+      anyDeleted = true;
     }
-    return true;
+
+    const colRef = collection(db, 'users');
+    const snap = await getDocs(colRef);
+    const targetEmail = email?.trim().toLowerCase();
+
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data() as UserProfile;
+      const matchUid = Boolean(uid && (docSnap.id === uid || data.uid === uid));
+      const matchEmail = Boolean(targetEmail && data.email?.trim().toLowerCase() === targetEmail);
+
+      if (matchUid || matchEmail) {
+        await deleteDoc(docSnap.ref);
+        anyDeleted = true;
+      }
+    }
+    return anyDeleted;
   } catch (err) {
-    console.error(`[Firebase Server] Error deleting user ${uid} from Firestore:`, err);
+    console.error(`[Firebase Server] Error deleting user ${uid} / ${email} from Firestore:`, err);
     return false;
   }
 }

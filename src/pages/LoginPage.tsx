@@ -134,6 +134,44 @@ export const LoginPage: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
           </button>
         </form>
 
+        {/* Quick Demo Accounts Selection */}
+        <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-2 text-center">
+            Tài khoản mẫu thử nghiệm (Nhấn để điền nhanh):
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setEmail('admin@studentstudy.edu');
+                setPassword('Admin@123');
+              }}
+              className="px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-center cursor-pointer border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800"
+            >
+              Quản trị viên
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEmail('teacher@studentstudy.edu');
+                setPassword('Teacher@123');
+              }}
+              className="px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-center cursor-pointer border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800"
+            >
+              Giảng viên
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEmail('student01@studentstudy.edu');
+                setPassword('Student@123');
+              }}
+              className="px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-center cursor-pointer border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800"
+            >
+              Học viên
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Forgot Password Modal */}

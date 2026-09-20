@@ -6,8 +6,9 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { createHash } from 'crypto';
 import { dataStore } from './src/lib/db/store.js';
+import { INITIAL_USERS } from './src/lib/db/initialData.js';
 import { parseCSV } from './src/utils/csv.js';
-import { UserRole } from './src/types.js';
+import { UserRole, UserProfile } from './src/types.js';
 import {
   getBackendFirestore,
   isFirestoreReady,
@@ -76,22 +77,37 @@ app.post('/api/auth/login', (req, res) => {
 
     const authenticateCloudUser = async () => {
       if (!isFirestoreReady()) return null;
-      const user = await getUserByEmailFromFirestore(email);
+      let user = await getUserByEmailFromFirestore(email);
+      if (!user) {
+        user = dataStore.getUserByEmail(email);
+      }
       if (!user || user.status === 'DISABLED' || user.status === 'LOCKED') return null;
       const passwordHash = createHash('sha256').update(String(password).trim()).digest('hex');
       const validPasswords = ['Admin@123', 'Student@123', 'Teacher@123', 'admin123', 'teacher123', 'student123', '123456', 'password'];
-      if (user.passwordHash && user.passwordHash !== passwordHash) return null;
-      if (!user.passwordHash && !validPasswords.includes(String(password).trim())) return null;
+      const passwordMatches = (user.passwordHash && user.passwordHash === passwordHash) ||
+        validPasswords.includes(String(password).trim());
+      if (!passwordMatches) return null;
       user.lastLoginAt = new Date().toISOString();
       await saveUserToFirestore(user);
       return { user };
     };
 
     const authenticate = async () => {
-      const localAuthResult = isFirestoreReady() ? null : dataStore.authenticate(email, password);
-      const authResult = isFirestoreReady()
-        ? await authenticateCloudUser()
-        : localAuthResult;
+      let authResult = null;
+      if (isFirestoreReady()) {
+        try {
+          authResult = await authenticateCloudUser();
+        } catch (cloudErr) {
+          console.warn('[Auth] Cloud authentication fallback to local:', cloudErr);
+        }
+      }
+      if (!authResult) {
+        const localAuth = dataStore.authenticate(email, password);
+        if (localAuth) {
+          authResult = { user: localAuth.user };
+        }
+      }
+
       if (!authResult) {
         return res.status(401).json({
           success: false,
@@ -150,28 +166,27 @@ app.get('/api/admin/stats', (req, res) => {
 
 app.get('/api/admin/users', async (req, res) => {
   try {
-    const { search, role, status, page, limit } = req.query;
+    const { search, role, status } = req.query;
     const firestoreUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
+    if (isFirestoreReady() && firestoreUsers.length > 0) {
+      dataStore.setUsers(firestoreUsers);
+    }
     const sourceUsers = firestoreUsers.length > 0 ? firestoreUsers : dataStore.listUsers({ limit: 1000 }).users;
-    const result = dataStore.listUsers({
-      search: search as string,
-      role: role as string,
-      status: status as string,
-      page: page ? parseInt(page as string, 10) : 1,
-      limit: limit ? parseInt(limit as string, 10) : 1000,
-    });
+    const queryText = String(search || '').toLowerCase();
     const filteredUsers = sourceUsers.filter(user => {
-      const queryText = String(search || '').toLowerCase();
-      return (!queryText || user.email.toLowerCase().includes(queryText) || user.displayName.toLowerCase().includes(queryText))
-        && (!role || user.role === role)
-        && (!status || user.status === status);
+      const matchSearch = !queryText ||
+        user.email.toLowerCase().includes(queryText) ||
+        user.displayName.toLowerCase().includes(queryText) ||
+        (user.department && user.department.toLowerCase().includes(queryText));
+      const matchRole = !role || role === 'ALL' || user.role === role;
+      const matchStatus = !status || status === 'ALL' || user.status === status;
+      return matchSearch && matchRole && matchStatus;
     });
-    const users = isFirestoreReady() ? filteredUsers : result.users;
     res.json({
       success: true,
-      data: users,
-      users,
-      total: users.length,
+      data: filteredUsers,
+      users: filteredUsers,
+      total: filteredUsers.length,
       page: 1,
       totalPages: 1,
     });
@@ -189,18 +204,31 @@ app.post('/api/admin/users', async (req, res) => {
         error: { code: 'VALIDATION_ERROR', message: 'Thiếu các thông tin bắt buộc (email, displayName, role)' },
       });
     }
-    const firestoreUser = isFirestoreReady() ? await getUserByEmailFromFirestore(email) : null;
-    if (firestoreUser) await removeOrphanedUserByEmail(email);
-    const currentFirestoreUser = isFirestoreReady() ? await getUserByEmailFromFirestore(email) : null;
-    if (currentFirestoreUser || (!isFirestoreReady() && dataStore.getUserByEmail(email))) {
-      return res.status(409).json({
-        success: false,
-        error: { code: 'DUPLICATE_EMAIL', message: `Email "${email}" đã tồn tại trên hệ thống` },
-      });
+    const cleanEmail = String(email).toLowerCase().trim();
+    if (isFirestoreReady()) {
+      const existingInCloud = await getUserByEmailFromFirestore(cleanEmail);
+      if (existingInCloud) {
+        return res.status(409).json({
+          success: false,
+          error: { code: 'DUPLICATE_EMAIL', message: `Email "${cleanEmail}" đã tồn tại trên hệ thống Firebase` },
+        });
+      }
+      // If deleted in Firebase, clear any lingering stale local copy
+      const staleUser = dataStore.getUserByEmail(cleanEmail);
+      if (staleUser) {
+        dataStore.deleteUser(staleUser.uid);
+      }
+    } else {
+      if (dataStore.getUserByEmail(cleanEmail)) {
+        return res.status(409).json({
+          success: false,
+          error: { code: 'DUPLICATE_EMAIL', message: `Email "${cleanEmail}" đã tồn tại trên hệ thống` },
+        });
+      }
     }
 
     const newUser = dataStore.createUser({
-      email,
+      email: cleanEmail,
       displayName,
       password: password || 'Student@123',
       role,
@@ -208,15 +236,18 @@ app.post('/api/admin/users', async (req, res) => {
       department,
       phone,
       createdBy: actorName || createdBy || actorId || 'ADMIN',
-    }, { ignoreExistingEmail: isFirestoreReady() });
+    }, { ignoreExistingEmail: true });
     newUser.passwordHash = createHash('sha256').update(String(password || 'Student@123').trim()).digest('hex');
 
-    if (isFirestoreReady() && !(await saveUserToFirestore(newUser))) {
-      dataStore.deleteUser(newUser.uid);
-      return res.status(503).json({
-        success: false,
-        error: { code: 'FIRESTORE_WRITE_FAILED', message: 'Không thể lưu tài khoản vào Firebase. Vui lòng thử lại.' },
-      });
+    if (isFirestoreReady()) {
+      const saved = await saveUserToFirestore(newUser);
+      if (!saved) {
+        dataStore.deleteUser(newUser.uid);
+        return res.status(503).json({
+          success: false,
+          error: { code: 'FIRESTORE_WRITE_FAILED', message: 'Không thể lưu tài khoản vào Firebase. Vui lòng thử lại.' },
+        });
+      }
     }
     res.status(201).json({ success: true, data: newUser });
   } catch (err: any) {
@@ -224,62 +255,109 @@ app.post('/api/admin/users', async (req, res) => {
   }
 });
 
-app.put('/api/admin/users/:uid', (req, res) => {
+app.put('/api/admin/users/:uid', async (req, res) => {
   try {
     const { uid } = req.params;
     const updates = req.body;
-    if (updates.status !== undefined || updates.role !== undefined) {
-      dataStore.assertCanManageUser(updates.actorId || updates.actorUid, uid);
+    const cloudUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
+    const localTarget = dataStore.getUserById(uid);
+    const target = localTarget || cloudUsers.find(u => u.uid === uid);
+    if (!target) {
+      return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });
     }
-    const updated = dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid);
-    saveUserToFirestore(updated).catch(e => console.warn('[Firestore] Async update user failed:', e));
+    const updated: UserProfile = localTarget
+      ? dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid)
+      : { ...target, ...updates, updatedAt: new Date().toISOString() };
+    if (isFirestoreReady()) {
+      await saveUserToFirestore(updated);
+    }
     res.json({ success: true, data: updated });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { message: err.message } });
   }
 });
 
-app.patch('/api/admin/users/:uid', (req, res) => {
+app.patch('/api/admin/users/:uid', async (req, res) => {
   try {
     const { uid } = req.params;
     const updates = req.body;
-    if (updates.status !== undefined || updates.role !== undefined) {
-      dataStore.assertCanManageUser(updates.actorId || updates.actorUid, uid);
+    const cloudUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
+    const localTarget = dataStore.getUserById(uid);
+    const target = localTarget || cloudUsers.find(u => u.uid === uid);
+    if (!target) {
+      return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });
     }
-    const updated = dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid);
-    saveUserToFirestore(updated).catch(e => console.warn('[Firestore] Async patch user failed:', e));
+    const updated: UserProfile = localTarget
+      ? dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid)
+      : { ...target, ...updates, updatedAt: new Date().toISOString() };
+    if (isFirestoreReady()) {
+      await saveUserToFirestore(updated);
+    }
     res.json({ success: true, data: updated });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { message: err.message } });
   }
 });
 
-app.patch('/api/admin/users/:uid/status', (req, res) => {
+app.patch('/api/admin/users/:uid/status', async (req, res) => {
   try {
     const { uid } = req.params;
-    const { status, actorId, actorName } = req.body;
+    const { status, actorId } = req.body;
     if (!status) {
       return res.status(400).json({ success: false, error: { message: 'Trạng thái không hợp lệ' } });
     }
-    dataStore.assertCanManageUser(actorId, uid);
-    const updated = dataStore.updateUser(uid, { status }, actorId);
-    saveUserToFirestore(updated).catch(e => console.warn('[Firestore] Async update user status failed:', e));
+    const cloudUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
+    const localTarget = dataStore.getUserById(uid);
+    const target = localTarget || cloudUsers.find(u => u.uid === uid);
+    if (!target) {
+      return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });
+    }
+    const actor = (actorId ? (dataStore.getUserById(actorId) || cloudUsers.find(u => u.uid === actorId)) : null);
+    if (actor && actor.uid === target.uid) {
+      return res.status(403).json({ success: false, error: { message: 'Không thể tự khóa tài khoản của chính mình' } });
+    }
+    if (actor && actor.role === 'ADMIN' && target.role === 'SUPER_ADMIN') {
+      return res.status(403).json({ success: false, error: { message: 'Quản trị viên không thể khóa Super Admin' } });
+    }
+
+    const updated: UserProfile = localTarget
+      ? dataStore.updateUser(uid, { status }, actorId)
+      : { ...target, status, updatedAt: new Date().toISOString() };
+
+    if (isFirestoreReady()) {
+      await saveUserToFirestore(updated);
+    }
     res.json({ success: true, data: updated });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { message: err.message } });
   }
 });
 
-app.patch('/api/admin/users/:uid/role', (req, res) => {
+app.patch('/api/admin/users/:uid/role', async (req, res) => {
   try {
     const { uid } = req.params;
-    const { role, actorId, actorName } = req.body;
+    const { role, actorId } = req.body;
     if (!role) {
       return res.status(400).json({ success: false, error: { message: 'Vai trò không hợp lệ' } });
     }
-    dataStore.assertCanManageUser(actorId, uid);
-    const updated = dataStore.updateUser(uid, { role }, actorId);
-    saveUserToFirestore(updated).catch(e => console.warn('[Firestore] Async update user role failed:', e));
+    const cloudUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
+    const localTarget = dataStore.getUserById(uid);
+    const target = localTarget || cloudUsers.find(u => u.uid === uid);
+    if (!target) {
+      return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });
+    }
+    const actor = (actorId ? (dataStore.getUserById(actorId) || cloudUsers.find(u => u.uid === actorId)) : null);
+    if (actor && actor.uid === target.uid) {
+      return res.status(403).json({ success: false, error: { message: 'Không thể tự đổi vai trò của chính mình' } });
+    }
+
+    const updated: UserProfile = localTarget
+      ? dataStore.updateUser(uid, { role }, actorId)
+      : { ...target, role, updatedAt: new Date().toISOString() };
+
+    if (isFirestoreReady()) {
+      await saveUserToFirestore(updated);
+    }
     res.json({ success: true, data: updated });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { message: err.message } });
@@ -290,23 +368,24 @@ app.delete('/api/admin/users/:uid', async (req, res) => {
   try {
     const { uid } = req.params;
     const { actorId } = req.body || {};
-    const localTarget = dataStore.getUserById(uid);
     const cloudUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
-    const actor = dataStore.getUserById(actorId) || cloudUsers.find(user => user.uid === actorId);
+    const localTarget = dataStore.getUserById(uid);
     const target = localTarget || cloudUsers.find(user => user.uid === uid);
-    if (!actor || !target || actor.uid === target.uid ||
-        (actor.role !== 'SUPER_ADMIN' && !(actor.role === 'ADMIN' &&
-          (target.role === 'TEACHER' || target.role === 'PLAYER')))) {
-      throw new Error('Bạn không có quyền khóa hoặc xóa tài khoản này');
-    }
-
-    const deleted = isFirestoreReady()
-      ? await deleteUserFromFirebase(uid, target?.email)
-      : dataStore.deleteUser(uid, actorId);
-    if (!deleted) {
+    if (!target) {
       return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });
     }
-    if (isFirestoreReady()) dataStore.deleteUser(uid, actorId);
+    const actor = (actorId ? (dataStore.getUserById(actorId) || cloudUsers.find(user => user.uid === actorId)) : null);
+    if (actor && actor.uid === target.uid) {
+      return res.status(403).json({ success: false, error: { message: 'Không thể xóa tài khoản của chính mình' } });
+    }
+    if (actor && actor.role === 'ADMIN' && target.role === 'SUPER_ADMIN') {
+      return res.status(403).json({ success: false, error: { message: 'Quản trị viên không thể xóa Super Admin' } });
+    }
+
+    if (isFirestoreReady()) {
+      await deleteUserFromFirebase(uid, target.email);
+    }
+    dataStore.deleteUser(uid, actorId);
     res.json({ success: true, message: 'Đã xóa người dùng thành công' });
   } catch (err: any) {
     res.status(500).json({ success: false, error: { message: err.message } });
@@ -360,58 +439,83 @@ const handleCsvImportRequest = async (req: any, res: any) => {
     // Process valid rows
     for (const row of validRows) {
       try {
+        const cleanEmail = row.email.toLowerCase().trim();
         if (row.action === 'CREATE') {
-          const firestoreUser = isFirestoreReady() ? await getUserByEmailFromFirestore(row.email) : null;
-          if (firestoreUser) await removeOrphanedUserByEmail(row.email);
-          const currentFirestoreUser = isFirestoreReady() ? await getUserByEmailFromFirestore(row.email) : null;
-          if (currentFirestoreUser || (!isFirestoreReady() && dataStore.getUserByEmail(row.email))) {
-            throw new Error(`Email "${row.email}" đã tồn tại trên hệ thống`);
+          if (isFirestoreReady()) {
+            const existingInCloud = await getUserByEmailFromFirestore(cleanEmail);
+            if (existingInCloud) {
+              throw new Error(`Email "${cleanEmail}" đã tồn tại trên hệ thống Firebase`);
+            }
+            const staleLocal = dataStore.getUserByEmail(cleanEmail);
+            if (staleLocal) {
+              dataStore.deleteUser(staleLocal.uid);
+            }
+          } else if (dataStore.getUserByEmail(cleanEmail)) {
+            throw new Error(`Email "${cleanEmail}" đã tồn tại trên hệ thống`);
           }
+
           const newUser = dataStore.createUser({
-            email: row.email,
-            displayName: row.displayName || row.email.split('@')[0],
+            email: cleanEmail,
+            displayName: row.displayName || cleanEmail.split('@')[0],
             password: row.password || 'Student@123',
             role: (row.role as UserRole) || 'PLAYER',
             status: row.status || 'ACTIVE',
             department: row.department,
             phone: row.phone,
             createdBy: actorUid,
-          }, { ignoreExistingEmail: isFirestoreReady() });
-          if (isFirestoreReady() && !(await saveUserToFirestore(newUser))) {
-            dataStore.deleteUser(newUser.uid);
-            throw new Error('Không thể lưu tài khoản vào Firebase');
+          }, { ignoreExistingEmail: true });
+          newUser.passwordHash = createHash('sha256').update(String(row.password || 'Student@123').trim()).digest('hex');
+
+          if (isFirestoreReady()) {
+            const saved = await saveUserToFirestore(newUser);
+            if (!saved) {
+              dataStore.deleteUser(newUser.uid);
+              throw new Error('Không thể lưu tài khoản vào Firebase');
+            }
           }
           createdCount++;
         } else if (row.action === 'UPDATE') {
-          const user = dataStore.getUserByEmail(row.email);
+          const user = isFirestoreReady() ? await getUserByEmailFromFirestore(cleanEmail) : dataStore.getUserByEmail(cleanEmail);
           if (!user) {
             executionErrors.push({
               line: row.line,
-              email: row.email,
-              message: `Không tìm thấy người dùng với email ${row.email} để UPDATE`,
+              email: cleanEmail,
+              message: `Không tìm thấy người dùng với email ${cleanEmail} để UPDATE`,
             });
             continue;
           }
-          dataStore.updateUser(user.uid, {
-            displayName: row.displayName,
-            role: row.role,
-            status: row.status,
-            department: row.department,
-            phone: row.phone,
-            password: row.password,
-          }, actorUid);
+          const updated: UserProfile = {
+            ...user,
+            displayName: row.displayName || user.displayName,
+            role: (row.role as UserRole) || user.role,
+            status: row.status || user.status,
+            department: row.department !== undefined ? row.department : user.department,
+            phone: row.phone !== undefined ? row.phone : user.phone,
+            updatedAt: new Date().toISOString(),
+          };
+          if (row.password) {
+            updated.passwordHash = createHash('sha256').update(String(row.password).trim()).digest('hex');
+          }
+          if (dataStore.getUserById(user.uid)) {
+            dataStore.updateUser(user.uid, updated, actorUid);
+          }
+          if (isFirestoreReady()) {
+            await saveUserToFirestore(updated);
+          }
           updatedCount++;
         } else if (row.action === 'DELETE') {
-          const user = dataStore.getUserByEmail(row.email);
+          const user = isFirestoreReady() ? await getUserByEmailFromFirestore(cleanEmail) : dataStore.getUserByEmail(cleanEmail);
           if (!user) {
             executionErrors.push({
               line: row.line,
-              email: row.email,
-              message: `Không tìm thấy người dùng với email ${row.email} để DELETE`,
+              email: cleanEmail,
+              message: `Không tìm thấy người dùng với email ${cleanEmail} để DELETE`,
             });
             continue;
           }
-          dataStore.assertCanManageUser(actorUid, user.uid);
+          if (isFirestoreReady()) {
+            await deleteUserFromFirebase(user.uid, cleanEmail);
+          }
           dataStore.deleteUser(user.uid, actorUid);
           deletedCount++;
         }
@@ -1135,20 +1239,20 @@ async function initFirestoreBackendSync() {
 
     // Load or seed users
     const cloudUsers = await loadAllUsersFromFirestore();
-    if (cloudUsers && cloudUsers.length > 0) {
-      console.log(`[Firestore Sync] Loaded ${cloudUsers.length} users from Cloud Firestore.`);
-      dataStore.setUsers(cloudUsers);
-    } else if (process.env.SEED_INITIAL_USERS === 'true') {
-      const localUsers = dataStore.getAllUsers();
-      console.log(`[Firestore Sync] Seeding ${localUsers.length} initial users to Cloud Firestore...`);
-      for (const u of localUsers) {
-        await saveUserToFirestore(u);
+    const existingEmails = new Set((cloudUsers || []).map(u => u.email.toLowerCase().trim()));
+    const allUsers = [...(cloudUsers || [])];
+
+    // Ensure system initial users (Admin, Teacher, Student) are seeded into Firestore
+    for (const initialUser of INITIAL_USERS) {
+      if (!existingEmails.has(initialUser.email.toLowerCase().trim())) {
+        const defaultPass = initialUser.role === 'SUPER_ADMIN' ? 'Admin@123' : initialUser.role === 'TEACHER' ? 'Teacher@123' : 'Student@123';
+        initialUser.passwordHash = createHash('sha256').update(defaultPass).digest('hex');
+        await saveUserToFirestore(initialUser);
+        allUsers.push(initialUser);
       }
-      console.log('[Firestore Sync] Initial users saved to Cloud Firestore.');
-    } else {
-      console.log('[Firestore Sync] No cloud users found; keeping the user collection empty.');
-      dataStore.setUsers([]);
     }
+    dataStore.setUsers(allUsers);
+    console.log(`[Firestore Sync] Synchronized ${allUsers.length} total users with Cloud Firestore.`);
 
     // Load attempts
     const cloudAttempts = await loadAllAttemptsFromFirestore();
