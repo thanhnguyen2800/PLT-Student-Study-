@@ -611,6 +611,30 @@ app.get('/api/quizzes', (req, res) => {
   }
 });
 
+// Specific static route for attempts (must precede /:id)
+app.get('/api/quizzes/attempts', (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (userId) {
+      const attempts = dataStore.getUserAttempts(userId as string);
+      return res.json({ success: true, data: attempts });
+    }
+    return res.json({ success: true, data: dataStore.getAllAttempts() });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+});
+
+app.post('/api/quizzes/attempt', (req, res) => {
+  try {
+    const attempt = dataStore.saveQuizAttempt(req.body);
+    saveAttemptToFirestore(attempt).catch(e => console.warn('[Firestore] Async save attempt failed:', e));
+    res.status(201).json({ success: true, data: attempt });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { message: err.message } });
+  }
+});
+
 app.get('/api/quizzes/:id', (req, res) => {
   try {
     const quiz = dataStore.getQuizById(req.params.id);
@@ -669,16 +693,6 @@ app.post('/api/quizzes/:id/duplicate', (req, res) => {
     const duplicated = dataStore.duplicateQuiz(req.params.id, ownerId, ownerName);
     saveQuizToFirestore(duplicated).catch(e => console.warn('[Firestore] Async save duplicated quiz failed:', e));
     res.json({ success: true, data: duplicated });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: { message: err.message } });
-  }
-});
-
-app.post('/api/quizzes/attempt', (req, res) => {
-  try {
-    const attempt = dataStore.saveQuizAttempt(req.body);
-    saveAttemptToFirestore(attempt).catch(e => console.warn('[Firestore] Async save attempt failed:', e));
-    res.status(201).json({ success: true, data: attempt });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { message: err.message } });
   }

@@ -79,16 +79,43 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate, openAIChat
       })
       .catch(console.error);
 
-    // Read user attempts from local storage if available
-    try {
-      const stored = localStorage.getItem('studentstudy_attempts_v1');
-      if (stored) {
-        setAttempts(JSON.parse(stored));
+    // Fetch user-specific attempts
+    const fetchUserAttempts = async () => {
+      if (currentUser?.uid) {
+        try {
+          const res = await fetch(`/api/quizzes/attempts?userId=${currentUser.uid}`);
+          const json = await res.json();
+          if (json.success && Array.isArray(json.data)) {
+            setAttempts(json.data);
+            return;
+          }
+        } catch (e) {
+          console.warn('Could not fetch user attempts from server:', e);
+        }
       }
-    } catch (e) {
-      console.warn(e);
-    }
-  }, []);
+
+      // Fallback to local storage (strictly filtered by current user)
+      try {
+        const stored = localStorage.getItem('studentstudy_attempts_v1');
+        if (stored) {
+          const all = JSON.parse(stored);
+          if (Array.isArray(all)) {
+            const filtered = currentUser
+              ? all.filter((a: any) => a.userId === currentUser.uid || a.userEmail === currentUser.email)
+              : all.filter((a: any) => !a.userId || a.userId === 'guest_user');
+            setAttempts(filtered);
+            return;
+          }
+        }
+        setAttempts([]);
+      } catch (e) {
+        console.warn(e);
+        setAttempts([]);
+      }
+    };
+
+    fetchUserAttempts();
+  }, [currentUser?.uid, currentUser?.email]);
 
   const handleJoinPin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,12 +124,62 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate, openAIChat
     }
   };
 
-  // Calculate metrics
+  // Calculate real metrics accurately for the current user (0 for new users)
   const totalCompleted = attempts.length;
   const avgAccuracy = totalCompleted > 0
-    ? Math.round((attempts.reduce((acc, a) => acc + (a.correctAnswers / (a.totalQuestions || 1)), 0) / totalCompleted) * 100)
-    : 85;
-  const bestScore = attempts.reduce((max, a) => Math.max(max, a.score), 0) || 1250;
+    ? Math.round(
+        (attempts.reduce((acc, a) => {
+          const totalQ = a.totalQuestions > 0 ? a.totalQuestions : 1;
+          const correct = typeof a.correctAnswers === 'number' ? a.correctAnswers : 0;
+          return acc + (correct / totalQ);
+        }, 0) / totalCompleted) * 100
+      )
+    : 0;
+
+  const bestScore = totalCompleted > 0
+    ? attempts.reduce((max, a) => Math.max(max, a.score || 0), 0)
+    : 0;
+
+  // Real continuous study streak in days
+  const calculateStreak = (list: QuizAttempt[]): number => {
+    if (!list || list.length === 0) return 0;
+    const dateStrings = Array.from(
+      new Set(
+        list
+          .map(a => a.createdAt ? new Date(a.createdAt).toLocaleDateString('en-CA') : '')
+          .filter(Boolean)
+      )
+    ).sort().reverse();
+
+    if (dateStrings.length === 0) return 0;
+
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStr = yesterdayDate.toLocaleDateString('en-CA');
+
+    // Only active if latest quiz was taken today or yesterday
+    if (dateStrings[0] !== todayStr && dateStrings[0] !== yesterdayStr) {
+      return 0;
+    }
+
+    let count = 1;
+    let curr = new Date(dateStrings[0]);
+    for (let i = 1; i < dateStrings.length; i++) {
+      const prevExpected = new Date(curr);
+      prevExpected.setDate(prevExpected.getDate() - 1);
+      const prevExpectedStr = prevExpected.toLocaleDateString('en-CA');
+      if (dateStrings[i] === prevExpectedStr) {
+        count++;
+        curr = prevExpected;
+      } else {
+        break;
+      }
+    }
+    return count;
+  };
+
+  const studyStreak = calculateStreak(attempts);
 
   return (
     <div className="space-y-8 animate-in fade-in">
@@ -158,7 +235,10 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate, openAIChat
           </div>
           <div>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Quiz đã hoàn thành</p>
-            <p className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">{totalCompleted || 12}</p>
+            <p className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">{totalCompleted}</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {totalCompleted === 0 ? 'Chưa làm bài nào' : `${totalCompleted} bài đã làm`}
+            </p>
           </div>
         </div>
 
@@ -168,7 +248,12 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate, openAIChat
           </div>
           <div>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Độ chính xác trung bình</p>
-            <p className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">{avgAccuracy}%</p>
+            <p className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">
+              {totalCompleted === 0 ? '0%' : `${avgAccuracy}%`}
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {totalCompleted === 0 ? 'Chưa có bài thi' : 'Tỷ lệ trả lời đúng'}
+            </p>
           </div>
         </div>
 
@@ -178,7 +263,12 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate, openAIChat
           </div>
           <div>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Chuỗi ngày học liên tục</p>
-            <p className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">5 ngày 🔥</p>
+            <p className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">
+              {studyStreak} ngày {studyStreak > 0 ? '🔥' : ''}
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {studyStreak === 0 ? 'Học ngay hôm nay' : 'Duy trì học đều đặn'}
+            </p>
           </div>
         </div>
 
@@ -189,6 +279,9 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate, openAIChat
           <div>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Điểm kỷ lục cao nhất</p>
             <p className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">{bestScore} pts</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {totalCompleted === 0 ? 'Chưa có điểm thi' : 'Thành tích cao nhất'}
+            </p>
           </div>
         </div>
       </div>

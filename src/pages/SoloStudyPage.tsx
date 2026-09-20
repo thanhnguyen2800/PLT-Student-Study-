@@ -137,23 +137,37 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
       const totalCorrect = answersHistory.filter(a => a.isCorrect).length + (isCurrentCorrect() ? 1 : 0);
       const totalQuestions = questionsList.length;
 
+      const attemptData = {
+        userId: currentUser?.uid || 'guest_user',
+        userName: currentUser?.displayName || 'Học viên',
+        userEmail: currentUser?.email,
+        quizId: quiz?.id,
+        quizTitle: quiz?.title || '',
+        score: score + (isCurrentCorrect() ? (currentQ.points || 100) : 0),
+        totalPoints: questionsList.reduce((acc, q) => acc + (q.points || 100), 0),
+        totalQuestions,
+        correctAnswers: totalCorrect,
+        wrongAnswers: totalQuestions - totalCorrect,
+        duration: answersHistory.reduce((acc, a) => acc + a.timeTaken, 0),
+        answers: answersHistory,
+        createdAt: new Date().toISOString(),
+      };
+
       fetch('/api/quizzes/attempt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: currentUser?.uid || 'guest_user',
-          userName: currentUser?.displayName || 'Học viên',
-          quizId: quiz?.id,
-          quizTitle: quiz?.title || '',
-          score: score + (isCurrentCorrect() ? (currentQ.points || 100) : 0),
-          totalPoints: questionsList.reduce((acc, q) => acc + (q.points || 100), 0),
-          totalQuestions,
-          correctAnswers: totalCorrect,
-          wrongAnswers: totalQuestions - totalCorrect,
-          duration: answersHistory.reduce((acc, a) => acc + a.timeTaken, 0),
-          answers: answersHistory,
-        }),
+        body: JSON.stringify(attemptData),
       }).catch(console.error);
+
+      // Also persist to local storage for instant offline / client reflection
+      try {
+        const stored = localStorage.getItem('studentstudy_attempts_v1');
+        const parsed = stored ? JSON.parse(stored) : [];
+        parsed.unshift({ ...attemptData, id: 'att_' + Date.now() });
+        localStorage.setItem('studentstudy_attempts_v1', JSON.stringify(parsed.slice(0, 100)));
+      } catch (err) {
+        console.warn('Could not save local attempt:', err);
+      }
 
       // Collect wrong questions for review mode
       const wrongs = questionsList.filter((q, idx) => {

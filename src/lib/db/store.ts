@@ -291,7 +291,12 @@ class DataStore {
       action: 'CREATE_USER',
       targetType: 'USER',
       targetId: uid,
-      metadata: { email: newUser.email, role: newUser.role, department: newUser.department },
+      metadata: { 
+        email: newUser.email, 
+        displayName: newUser.displayName,
+        role: newUser.role, 
+        department: newUser.department 
+      },
     });
 
     return newUser;
@@ -331,7 +336,13 @@ class DataStore {
       action: 'UPDATE_USER',
       targetType: 'USER',
       targetId: uid,
-      metadata: { updates },
+      metadata: { 
+        email: user.email,
+        displayName: user.displayName,
+        role: user.role,
+        status: user.status,
+        updates,
+      },
     });
 
     return user;
@@ -387,7 +398,12 @@ class DataStore {
       action: 'DELETE_USER',
       targetType: 'USER',
       targetId: uid,
-      metadata: { email: user.email },
+      metadata: { 
+        email: user.email,
+        displayName: user.displayName,
+        role: user.role,
+        department: user.department,
+      },
     });
 
     return true;

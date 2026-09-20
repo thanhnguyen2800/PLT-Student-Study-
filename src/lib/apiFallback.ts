@@ -307,6 +307,12 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
     return makeJsonResponse({ success: true, data: saved });
   }
 
+  if (path.startsWith('/api/quizzes/attempts') && method === 'GET') {
+    const userId = url.searchParams.get('userId');
+    const attempts = userId ? dataStore.getUserAttempts(userId) : dataStore.getAllAttempts();
+    return makeJsonResponse({ success: true, data: attempts });
+  }
+
   // 4. Admin Users & Stats
   if (path === '/api/admin/stats' && method === 'GET') {
     const metrics = dataStore.getSystemMetrics();

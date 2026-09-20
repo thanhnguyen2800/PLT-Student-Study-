@@ -19,6 +19,7 @@ import {
 import { User, UserRole, UserStatus, AuditLog } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { RoleBadge, StatusBadge } from '../components/common/Badge';
+import { AuditLogViewer } from '../components/admin/AuditLogViewer';
 
 export const AdminPage: React.FC = () => {
   const { currentUser, canAccess } = useAuth();
@@ -31,7 +32,7 @@ export const AdminPage: React.FC = () => {
   // Create User Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserPassword, setNewUserPassword] = useState('Admin@123');
+  const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserName, setNewUserName] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>('PLAYER');
   const [newUserDept, setNewUserDept] = useState('Khoa Công nghệ thông tin');
@@ -126,6 +127,10 @@ export const AdminPage: React.FC = () => {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setActionFeedback(null);
+    if (!newUserPassword || newUserPassword.length < 6) {
+      setActionFeedback({ type: 'error', message: 'Mật khẩu khởi tạo phải có tối thiểu 6 ký tự.' });
+      return;
+    }
     try {
       const res = await fetch('/api/admin/users', {
         method: 'POST',
@@ -146,6 +151,7 @@ export const AdminPage: React.FC = () => {
         setShowCreateModal(false);
         setNewUserEmail('');
         setNewUserName('');
+        setNewUserPassword('');
         setActionFeedback({ type: 'success', message: `Đã tạo tài khoản "${newUserName.trim() || newUserEmail.trim()}" thành công!` });
         await fetchUsers();
         fetchLogs();
@@ -292,8 +298,8 @@ export const AdminPage: React.FC = () => {
   const handleDownloadCsvTemplate = () => {
     const template = [
       'action,email,displayName,password,role,status,department,phone',
-      'CREATE,student01@studentstudy.vn,Nguyễn Mai Lan,Admin@123,PLAYER,ACTIVE,Khoa CNTT,0912345678',
-      'CREATE,student02@studentstudy.vn,Đặng Văn Nam,Admin@123,PLAYER,ACTIVE,Khoa Kinh Tế,0912345679',
+      'CREATE,user01@studentstudy.edu.vn,Nguyễn Mai Lan,MatKhau#2026,PLAYER,ACTIVE,Khoa CNTT,0912345678',
+      'CREATE,user02@studentstudy.edu.vn,Đặng Văn Nam,MatKhau#2026,PLAYER,ACTIVE,Khoa Kinh Tế,0912345679',
     ].join('\r\n');
     const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -599,47 +605,11 @@ export const AdminPage: React.FC = () => {
 
       {/* --- TAB 2: AUDIT LOGS --- */}
       {activeTab === 'LOGS' && (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-              <Activity className="w-4 h-4 text-indigo-600" />
-              Lịch sử thao tác & Nhật ký bảo mật (Audit Trails)
-            </h3>
-            <span className="text-xs text-slate-400">Tự động ghi lại mọi hành động phân quyền</span>
-          </div>
-
-          {isLoadingLogs ? (
-            <div className="py-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
-              <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-              <span>Đang tải nhật ký kiểm toán...</span>
-            </div>
-          ) : logList.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 text-xs">
-              Chưa có nhật ký kiểm toán nào được ghi nhận.
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {logList.map(log => (
-                <div key={log.id} className="py-3 flex items-start justify-between gap-4 text-xs">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900 dark:text-white">{log.actorName || log.actorEmail || 'Hệ thống'}</span>
-                      <span className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 font-mono text-[10px]">
-                        {log.action}
-                      </span>
-                      <span className="text-slate-500">→ {log.target || log.targetId || log.targetType || ''}</span>
-                    </div>
-                    <p className="text-slate-400 text-[11px]">{log.details || (log.metadata ? JSON.stringify(log.metadata) : '')}</p>
-                  </div>
-
-                  <span className="font-mono text-slate-400 text-[11px] shrink-0">
-                    {new Date(log.timestamp || log.createdAt || Date.now()).toLocaleString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <AuditLogViewer 
+          logs={logList} 
+          isLoading={isLoadingLogs} 
+          onRefresh={fetchLogs} 
+        />
       )}
 
       {/* --- TAB 3: SYSTEM METRICS --- */}
@@ -727,9 +697,10 @@ export const AdminPage: React.FC = () => {
                     Mật khẩu ban đầu
                   </label>
                   <input
-                    type="text"
+                    type="password"
                     value={newUserPassword}
                     onChange={e => setNewUserPassword(e.target.value)}
+                    placeholder="Tối thiểu 6 ký tự"
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none font-mono"
                   />
                 </div>
@@ -801,7 +772,7 @@ export const AdminPage: React.FC = () => {
               rows={6}
               value={csvContent}
               onChange={e => setCsvContent(e.target.value)}
-                placeholder={`action,email,displayName,password,role,status,department,phone\nCREATE,student01@studentstudy.vn,Nguyễn Mai Lan,Admin@123,PLAYER,ACTIVE,Khoa CNTT,0912345678\nCREATE,student02@studentstudy.vn,Đặng Văn Nam,Admin@123,PLAYER,ACTIVE,Khoa Kinh Tế,0912345679`}
+                placeholder={`action,email,displayName,password,role,status,department,phone\nCREATE,user01@studentstudy.edu.vn,Nguyễn Mai Lan,MatKhau#2026,PLAYER,ACTIVE,Khoa CNTT,0912345678\nCREATE,user02@studentstudy.edu.vn,Đặng Văn Nam,MatKhau#2026,PLAYER,ACTIVE,Khoa Kinh Tế,0912345679`}
               className="w-full p-3 font-mono text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
             />
 

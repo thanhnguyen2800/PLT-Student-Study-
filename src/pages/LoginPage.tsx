@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Lock, Mail, ShieldAlert, KeyRound, ArrowRight, CheckCircle2, Sun, Moon } from 'lucide-react';
+import { Lock, Mail, ShieldAlert, ArrowRight, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { PltLogo } from '../components/common/PltLogo';
@@ -11,8 +11,6 @@ export const LoginPage: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [showForgotModal, setShowForgotModal] = useState(false);
-  const [forgotSent, setForgotSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,18 +91,9 @@ export const LoginPage: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Mật khẩu
-              </label>
-              <button
-                type="button"
-                onClick={() => setShowForgotModal(true)}
-                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
-              >
-                Quên mật khẩu?
-              </button>
-            </div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+              Mật khẩu
+            </label>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
@@ -133,101 +122,7 @@ export const LoginPage: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =>
             )}
           </button>
         </form>
-
-        {/* Quick Demo Accounts Selection */}
-        <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-2 text-center">
-            Tài khoản mẫu thử nghiệm (Nhấn để điền nhanh):
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setEmail('admin@studentstudy.edu');
-                setPassword('Admin@123');
-              }}
-              className="px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-center cursor-pointer border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800"
-            >
-              Quản trị viên
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setEmail('teacher@studentstudy.edu');
-                setPassword('Teacher@123');
-              }}
-              className="px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-center cursor-pointer border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800"
-            >
-              Giảng viên
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setEmail('student01@studentstudy.edu');
-                setPassword('Student@123');
-              }}
-              className="px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-center cursor-pointer border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800"
-            >
-              Học viên
-            </button>
-          </div>
-        </div>
       </div>
-
-      {/* Forgot Password Modal */}
-      {showForgotModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 max-w-sm w-full shadow-2xl">
-            <div className="flex items-center gap-2 mb-3">
-              <KeyRound className="w-5 h-5 text-indigo-600" />
-              <h3 className="font-semibold text-sm text-slate-900 dark:text-white">Cấp lại mật khẩu</h3>
-            </div>
-            {forgotSent ? (
-              <div className="space-y-4 text-center py-4">
-                <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-                <p className="text-xs text-slate-600 dark:text-slate-300">
-                  Yêu cầu đã được gửi đến Ban Quản Trị. Quản trị viên sẽ kiểm tra và cấp mã đặt lại mật khẩu an toàn cho bạn.
-                </p>
-                <button
-                  onClick={() => {
-                    setShowForgotModal(false);
-                    setForgotSent(false);
-                  }}
-                  className="w-full py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold"
-                >
-                  Đã hiểu
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Do chính sách không công khai tự đặt lại, vui lòng nhập email đã được cấp để gửi thông báo đến Quản trị viên:
-                </p>
-                <input
-                  type="email"
-                  defaultValue={email}
-                  placeholder="name@school.edu.vn"
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
-                />
-                <div className="flex gap-2 pt-2">
-                  <button
-                    onClick={() => setShowForgotModal(false)}
-                    className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-400"
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    onClick={() => setForgotSent(true)}
-                    className="flex-1 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold"
-                  >
-                    Gửi yêu cầu
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
