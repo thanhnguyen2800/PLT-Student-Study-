@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { Quiz, UserProfile, QuizAttempt, AuditLog } from '../../types';
 import appletConfig from '../../../firebase-applet-config.json';
+import { getAdminAuth } from './admin';
 
 interface FirebaseConfig {
   projectId: string;
@@ -183,6 +184,39 @@ export async function getUserByEmailFromFirestore(email: string): Promise<UserPr
   const users = await loadAllUsersFromFirestore();
   const target = email.toLowerCase().trim();
   return users.find(user => user.email.toLowerCase().trim() === target) || null;
+}
+
+export async function removeOrphanedUserByEmail(email: string): Promise<boolean> {
+  const auth = getAdminAuth();
+  if (!auth) return false;
+
+  try {
+    await auth.getUserByEmail(email.trim().toLowerCase());
+    return false;
+  } catch (error: any) {
+    if (error?.code !== 'auth/user-not-found') throw error;
+    const firestoreUser = await getUserByEmailFromFirestore(email);
+    return firestoreUser ? deleteUserFromFirestore(firestoreUser.uid) : false;
+  }
+}
+
+export async function deleteUserFromFirebase(uid: string, email?: string): Promise<boolean> {
+  const auth = getAdminAuth();
+  if (auth) {
+    try {
+      const authUser = email
+        ? await auth.getUserByEmail(email.trim().toLowerCase())
+        : await auth.getUser(uid);
+      await auth.deleteUser(authUser.uid);
+    } catch (error: any) {
+      if (error?.code !== 'auth/user-not-found') {
+        console.error(`[Firebase Admin] Error deleting auth user ${uid}:`, error);
+        return false;
+      }
+    }
+  }
+
+  return deleteUserFromFirestore(uid);
 }
 
 export async function deleteUserFromFirestore(uid: string): Promise<boolean> {

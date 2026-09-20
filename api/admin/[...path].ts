@@ -8,7 +8,8 @@ import {
   getUserByEmailFromFirestore,
   loadAllUsersFromFirestore,
   saveUserToFirestore,
-  deleteUserFromFirestore,
+  deleteUserFromFirebase,
+  removeOrphanedUserByEmail,
 } from '../../src/lib/firebase/serverFirestore';
 
 function json(res: any, status: number, body: any) {
@@ -38,6 +39,9 @@ async function createUser(body: any, actorId?: string, actorEmail?: string) {
   const { email, displayName, password, role, status, department, phone } = body;
   if (!email || !displayName || !role) {
     throw new Error('Thiếu các thông tin bắt buộc (email, displayName, role)');
+  }
+  if (await findUserByEmail(email)) {
+    await removeOrphanedUserByEmail(email);
   }
   if (await findUserByEmail(email)) {
     const error: any = new Error(`Email "${email}" đã tồn tại trên hệ thống`);
@@ -101,7 +105,7 @@ async function importCsv(body: any, actorId?: string, actorEmail?: string) {
         }
         if (row.action === 'DELETE') {
           if (isFirestoreReady()) {
-            if (!(await deleteUserFromFirestore(user.uid))) {
+            if (!(await deleteUserFromFirebase(user.uid, user.email))) {
               throw new Error('Không thể xóa tài khoản khỏi Firebase');
             }
           } else {
@@ -184,7 +188,8 @@ export default async function handler(req: any, res: any) {
       const uid = path[1];
       await assertCanDeleteUser(actorId, uid);
       if (isFirestoreReady()) {
-        if (!(await deleteUserFromFirestore(uid))) {
+        const target = dataStore.getUserById(uid) || (await loadAllUsersFromFirestore()).find(user => user.uid === uid);
+        if (!(await deleteUserFromFirebase(uid, target?.email))) {
           throw new Error('Không thể xóa tài khoản khỏi Firebase');
         }
         dataStore.deleteUser(uid, actorId);

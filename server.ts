@@ -16,7 +16,8 @@ import {
   loadAllQuizzesFromFirestore,
   saveUserToFirestore,
   getUserByEmailFromFirestore,
-  deleteUserFromFirestore,
+  deleteUserFromFirebase,
+  removeOrphanedUserByEmail,
   loadAllUsersFromFirestore,
   saveAttemptToFirestore,
   loadAllAttemptsFromFirestore,
@@ -189,7 +190,9 @@ app.post('/api/admin/users', async (req, res) => {
       });
     }
     const firestoreUser = isFirestoreReady() ? await getUserByEmailFromFirestore(email) : null;
-    if (firestoreUser || (!isFirestoreReady() && dataStore.getUserByEmail(email))) {
+    if (firestoreUser) await removeOrphanedUserByEmail(email);
+    const currentFirestoreUser = isFirestoreReady() ? await getUserByEmailFromFirestore(email) : null;
+    if (currentFirestoreUser || (!isFirestoreReady() && dataStore.getUserByEmail(email))) {
       return res.status(409).json({
         success: false,
         error: { code: 'DUPLICATE_EMAIL', message: `Email "${email}" đã tồn tại trên hệ thống` },
@@ -298,7 +301,7 @@ app.delete('/api/admin/users/:uid', async (req, res) => {
     }
 
     const deleted = isFirestoreReady()
-      ? await deleteUserFromFirestore(uid)
+      ? await deleteUserFromFirebase(uid, target?.email)
       : dataStore.deleteUser(uid, actorId);
     if (!deleted) {
       return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });
@@ -359,7 +362,9 @@ const handleCsvImportRequest = async (req: any, res: any) => {
       try {
         if (row.action === 'CREATE') {
           const firestoreUser = isFirestoreReady() ? await getUserByEmailFromFirestore(row.email) : null;
-          if (firestoreUser || (!isFirestoreReady() && dataStore.getUserByEmail(row.email))) {
+          if (firestoreUser) await removeOrphanedUserByEmail(row.email);
+          const currentFirestoreUser = isFirestoreReady() ? await getUserByEmailFromFirestore(row.email) : null;
+          if (currentFirestoreUser || (!isFirestoreReady() && dataStore.getUserByEmail(row.email))) {
             throw new Error(`Email "${row.email}" đã tồn tại trên hệ thống`);
           }
           const newUser = dataStore.createUser({
