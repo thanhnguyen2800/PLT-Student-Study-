@@ -44,6 +44,9 @@ export const AdminPage: React.FC = () => {
 
   // User Actions State
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<User | null>(null);
+  const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
+  const [newResetPassword, setNewResetPassword] = useState('');
+  const [resetResultSuccess, setResetResultSuccess] = useState<{ email: string; password: string } | null>(null);
   const [actionLoadingUid, setActionLoadingUid] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -256,6 +259,44 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPasswordUser) return;
+    setActionLoadingUid(resetPasswordUser.uid);
+    setActionFeedback(null);
+    try {
+      const res = await fetch(`/api/admin/users/${resetPasswordUser.uid}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newPassword: newResetPassword.trim() || undefined,
+          actorId: currentUser?.uid,
+          actorName: currentUser?.displayName,
+        }),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setResetResultSuccess({ email: resetPasswordUser.email, password: json.data.newPassword });
+        setResetPasswordUser(null);
+        setNewResetPassword('');
+        setActionFeedback({
+          type: 'success',
+          message: `Đã cấp lại mật khẩu cho tài khoản "${resetPasswordUser.email}" thành công!`,
+        });
+        fetchLogs();
+      } else {
+        setActionFeedback({
+          type: 'error',
+          message: json.error?.message || 'Không thể cấp lại mật khẩu',
+        });
+      }
+    } catch (e: any) {
+      setActionFeedback({ type: 'error', message: e.message || 'Lỗi khi cấp lại mật khẩu' });
+    } finally {
+      setActionLoadingUid(null);
+    }
+  };
+
   const handleCsvImport = async () => {
     if (!csvContent.trim()) return;
     try {
@@ -280,10 +321,13 @@ export const AdminPage: React.FC = () => {
         fetchUsers();
         fetchLogs();
       } else {
-        alert(json.error?.message || 'Không thể nhập danh sách tài khoản');
+        setActionFeedback({
+          type: 'error',
+          message: json.error?.message || 'Không thể nhập danh sách tài khoản từ file CSV',
+        });
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setActionFeedback({ type: 'error', message: e.message || 'Lỗi kết nối khi nhập danh sách tài khoản' });
     }
   };
 
@@ -345,29 +389,29 @@ export const AdminPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <ShieldCheck className="w-7 h-7 text-indigo-600" />
-            Bảng Quản Trị Hệ Thống (RBAC)
+          <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white flex items-center gap-3">
+            <ShieldCheck className="w-8 h-8 text-emerald-600" />
+            <span>Bảng Quản Trị Hệ Thống (RBAC)</span>
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mt-1">
             Cấp phát tài khoản, phân quyền học viên/giảng viên và giám sát nhật ký bảo mật
           </p>
           {firebaseInfo?.connected && (
-            <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300">
+            <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="font-semibold">Cloud Firestore ({firebaseInfo.project?.projectId}):</span>
+              <span className="font-bold">Cloud Firestore ({firebaseInfo.project?.projectId}):</span>
               <span>Đã kết nối qua Backend Proxy (Bảo mật tối đa, không lộ API key trên UI)</span>
             </div>
           )}
         </div>
 
         {/* Tab switcher */}
-        <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <button
             onClick={() => setActiveTab('USERS')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
               activeTab === 'USERS'
-                ? 'bg-indigo-600 text-white shadow-xs'
+                ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
@@ -375,9 +419,9 @@ export const AdminPage: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('LOGS')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
               activeTab === 'LOGS'
-                ? 'bg-indigo-600 text-white shadow-xs'
+                ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
@@ -385,9 +429,9 @@ export const AdminPage: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('METRICS')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
               activeTab === 'METRICS'
-                ? 'bg-indigo-600 text-white shadow-xs'
+                ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
@@ -398,18 +442,18 @@ export const AdminPage: React.FC = () => {
 
       {/* Action Notification Banner */}
       {actionFeedback && (
-        <div className={`p-3.5 rounded-2xl text-xs flex items-center justify-between border shadow-xs animate-in fade-in ${
+        <div className={`p-4 rounded-2xl text-sm flex items-center justify-between border shadow-xs animate-in fade-in ${
           actionFeedback.type === 'success'
-            ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
-            : 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300'
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+            : 'bg-rose-50 border-rose-200 text-rose-900 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300'
         }`}>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             {actionFeedback.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
             )}
-            <span className="font-semibold">{actionFeedback.message}</span>
+            <span className="font-bold">{actionFeedback.message}</span>
           </div>
           <button
             type="button"
@@ -547,6 +591,20 @@ export const AdminPage: React.FC = () => {
                           <div className="flex items-center justify-end gap-1.5">
                             {canManageUser(user) ? (
                               <>
+                                <button
+                                  type="button"
+                                  id={`btn-reset-pwd-${user.uid}`}
+                                  onClick={() => {
+                                    setResetPasswordUser(user);
+                                    setNewResetPassword('');
+                                  }}
+                                  disabled={actionLoadingUid === user.uid}
+                                  title="Cấp lại mật khẩu mới cho người dùng này"
+                                  className="px-2.5 py-1.5 rounded-lg border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:border-indigo-800 dark:text-indigo-400 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50"
+                                >
+                                  <KeyRound className="w-3.5 h-3.5" />
+                                  <span>Đổi MK</span>
+                                </button>
                                 <button
                                   type="button"
                                   id={`btn-toggle-status-${user.uid}`}
@@ -871,6 +929,118 @@ export const AdminPage: React.FC = () => {
                     <span>Xác nhận xóa</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetPasswordUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-md w-full shadow-2xl space-y-4">
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-indigo-600" />
+              Cấp lại mật khẩu người dùng
+            </h3>
+
+            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Tài khoản:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{resetPasswordUser.displayName || 'Chưa đặt tên'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Email:</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{resetPasswordUser.email}</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Mật khẩu mới (Để trống để hệ thống tự tạo mật khẩu ngẫu nhiên an toàn)
+                </label>
+                <input
+                  type="text"
+                  value={newResetPassword}
+                  onChange={e => setNewResetPassword(e.target.value)}
+                  placeholder="Để trống = Mật khẩu ngẫu nhiên"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={actionLoadingUid === resetPasswordUser.uid}
+                  onClick={() => {
+                    setResetPasswordUser(null);
+                    setNewResetPassword('');
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoadingUid === resetPasswordUser.uid}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {actionLoadingUid === resetPasswordUser.uid ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Đang cập nhật...</span>
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>Xác nhận cấp lại</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Result Success Modal */}
+      {resetResultSuccess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="w-5 h-5" />
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                Mật khẩu mới đã được cấp thành công
+              </h3>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              Vui lòng sao chép và gửi mật khẩu mới này cho người dùng <strong className="font-semibold text-slate-900 dark:text-white">{resetResultSuccess.email}</strong>:
+            </p>
+
+            <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <code className="text-sm font-bold font-mono text-indigo-600 dark:text-indigo-400 select-all">
+                {resetResultSuccess.password}
+              </code>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(resetResultSuccess.password);
+                }}
+                className="px-2.5 py-1 text-[11px] rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900 cursor-pointer"
+              >
+                Sao chép
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setResetResultSuccess(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs cursor-pointer"
+              >
+                Đóng
               </button>
             </div>
           </div>

@@ -322,85 +322,85 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
   const timeRatio = (timeRemaining / timeLimit) * 100;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in">
+    <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in pb-16">
       
       {/* Top Bar: Back & Progress & Timer */}
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
-          className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white"
+          className="flex items-center gap-1.5 text-sm sm:text-base font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer"
         >
-          <ArrowLeft className="w-4 h-4" />
-          Rời bài thi
+          <ArrowLeft className="w-5 h-5" />
+          <span>Rời bài thi</span>
         </button>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+          <span className="text-sm sm:text-base font-extrabold text-emerald-600 dark:text-emerald-400">
             Câu {currentIndex + 1} / {questionsList.length}
           </span>
           {isReviewMode && (
-            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
-              Review Mode
+            <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-bold">
+              Chế độ ôn tập
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1 text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
-          <Clock className={`w-4 h-4 ${timeRemaining <= 5 ? 'text-rose-500 animate-bounce' : 'text-slate-400'}`} />
+        <div className="flex items-center gap-1.5 text-sm sm:text-base font-mono font-bold text-slate-700 dark:text-slate-300">
+          <Clock className={`w-5 h-5 ${timeRemaining <= 5 ? 'text-rose-500 animate-bounce' : 'text-slate-400'}`} />
           <span>{timeRemaining}s</span>
         </div>
       </div>
 
       {/* Countdown Progress Bar */}
-      <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+      <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
         <div 
           className={`h-full transition-all duration-1000 rounded-full ${
-            timeRemaining <= 5 ? 'bg-rose-500' : 'bg-indigo-600'
+            timeRemaining <= 5 ? 'bg-rose-500' : 'bg-emerald-600'
           }`}
           style={{ width: `${timeRatio}%` }}
         />
       </div>
 
       {/* Question Card */}
-      <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-6">
+      <div className="bg-white dark:bg-slate-900 p-8 sm:p-10 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-8">
         
         {/* Header with TTS button */}
         <div className="flex items-start justify-between gap-4">
-          <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white leading-snug">
+          <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 dark:text-white leading-snug">
             {currentQ.question}
           </h2>
 
           <button
             onClick={() => speakText(currentQ.question)}
-            title="Đọc câu hỏi bằng AI Voice (gemini-3.1-flash-tts-preview)"
-            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-indigo-600 transition-colors shrink-0"
+            title="Đọc câu hỏi bằng AI Voice"
+            className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-emerald-600 transition-colors shrink-0 cursor-pointer"
           >
-            <Volume2 className="w-4 h-4" />
+            <Volume2 className="w-5 h-5" />
           </button>
         </div>
 
         {/* Question Image if present */}
         {currentQ.imageUrl && (
-          <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 max-h-64 aspect-video bg-slate-950">
+          <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 max-h-72 aspect-video bg-slate-950">
             <img src={currentQ.imageUrl} alt="Question Diagram" className="w-full h-full object-contain" />
           </div>
         )}
 
         {/* Options List */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           {currentQ.options.map((opt, idx) => {
             const isSelected = selectedAnswer === idx;
             const isCorrectOption = Array.isArray(currentQ.correctAnswer)
               ? (currentQ.correctAnswer as number[]).includes(idx)
               : Number(currentQ.correctAnswer) === idx;
 
-            let btnStyle = 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:border-indigo-400';
+            let btnStyle = 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:border-emerald-500';
 
             if (isAnswerSubmitted) {
               if (isCorrectOption) {
-                btnStyle = 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 font-bold';
+                btnStyle = 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 font-bold';
               } else if (isSelected) {
-                btnStyle = 'border-rose-500 bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200';
+                btnStyle = 'border-rose-500 bg-rose-50 dark:bg-rose-950/60 text-rose-900 dark:text-rose-200';
               } else {
                 btnStyle = 'opacity-40 border-slate-200 dark:border-slate-800';
               }
@@ -411,20 +411,20 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
                 key={idx}
                 disabled={isAnswerSubmitted}
                 onClick={() => handleSubmitAnswer(idx)}
-                className={`w-full text-left p-4 rounded-2xl border-2 text-xs sm:text-sm font-medium transition-all flex items-center justify-between gap-3 shadow-xs ${btnStyle}`}
+                className={`w-full text-left p-5 rounded-2xl border-2 text-base sm:text-lg font-semibold transition-all flex items-center justify-between gap-4 shadow-xs cursor-pointer ${btnStyle}`}
               >
-                <div className="flex items-center gap-3">
-                  <span className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center font-bold text-xs">
+                <div className="flex items-center gap-3.5">
+                  <span className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center font-black text-sm">
                     {String.fromCharCode(65 + idx)}
                   </span>
                   <span>{opt}</span>
                 </div>
 
                 {isAnswerSubmitted && isCorrectOption && (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0" />
                 )}
                 {isAnswerSubmitted && isSelected && !isCorrectOption && (
-                  <XCircle className="w-5 h-5 text-rose-500 shrink-0" />
+                  <XCircle className="w-6 h-6 text-rose-500 shrink-0" />
                 )}
               </button>
             );
@@ -433,23 +433,23 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
 
         {/* Explanation & Next Button */}
         {isAnswerSubmitted && (
-          <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800 animate-in fade-in">
+          <div className="space-y-5 pt-6 border-t border-slate-100 dark:border-slate-800 animate-in fade-in">
             {currentQ.explanation && (
-              <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 text-xs text-indigo-900 dark:text-indigo-200 space-y-1">
-                <p className="font-bold flex items-center gap-1.5">
-                  <HelpCircle className="w-4 h-4 text-indigo-600" />
-                  Giải thích đáp án:
+              <div className="p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 text-sm sm:text-base text-emerald-950 dark:text-emerald-200 space-y-1.5">
+                <p className="font-extrabold flex items-center gap-2">
+                  <HelpCircle className="w-5 h-5 text-emerald-600" />
+                  <span>Giải thích đáp án:</span>
                 </p>
-                <p className="leading-relaxed pl-5">{currentQ.explanation}</p>
+                <p className="leading-relaxed pl-7">{currentQ.explanation}</p>
               </div>
             )}
 
             <button
               onClick={handleNext}
-              className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-md shadow-indigo-600/20"
+              className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-base flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/20 cursor-pointer"
             >
               <span>{currentIndex + 1 < questionsList.length ? 'Câu hỏi tiếp theo' : 'Xem kết quả tổng kết'}</span>
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-5 h-5" />
             </button>
           </div>
         )}

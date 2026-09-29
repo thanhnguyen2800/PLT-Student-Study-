@@ -154,10 +154,10 @@ function parseCSVLine(line: string): string[] {
 export function generateSampleCSV(): string {
   return [
     'action,email,displayName,password,role,status,department,phone',
-    'CREATE,student01@school.edu.vn,Nguyễn Văn An,Student@123,PLAYER,ACTIVE,Công nghệ thông tin,0912345671',
-    'CREATE,student02@school.edu.vn,Trần Thị Bình,Student@123,PLAYER,ACTIVE,Kinh tế & Quản trị,0912345672',
-    'CREATE,teacher01@school.edu.vn,Lê Hoàng Nam,Teacher@123,TEACHER,ACTIVE,Khoa học Tự nhiên,0912345673',
-    'UPDATE,student01@school.edu.vn,Nguyễn Văn An (Cập nhật),,PLAYER,ACTIVE,Khoa Toán Tin,0912345671',
-    'DELETE,olduser@school.edu.vn,,,,,,',
+    'CREATE,user01@studentstudy.edu.vn,Nguyễn Mai Lan,MatKhau#2026,PLAYER,ACTIVE,Công nghệ thông tin,0912345671',
+    'CREATE,user02@studentstudy.edu.vn,Trần Thị Bình,MatKhau#2026,PLAYER,ACTIVE,Kinh tế & Quản trị,0912345672',
+    'CREATE,user03@studentstudy.edu.vn,Lê Hoàng Nam,MatKhau#2026,TEACHER,ACTIVE,Khoa học Tự nhiên,0912345673',
+    'UPDATE,user01@studentstudy.edu.vn,Nguyễn Mai Lan (Cập nhật),,PLAYER,ACTIVE,Khoa Toán Tin,0912345671',
+    'DELETE,olduser@studentstudy.edu.vn,,,,,,',
   ].join('\n');
 }

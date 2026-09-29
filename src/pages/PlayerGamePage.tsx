@@ -258,56 +258,56 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
         </div>
 
         {/* Mode Switcher Tabs */}
-        <div className="flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700">
+        <div className="flex p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700">
           <button
             onClick={() => setActiveTab('join')}
-            className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+            className={`flex-1 py-3 px-5 rounded-xl text-sm sm:text-base font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
               activeTab === 'join'
-                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Radio className="w-4 h-4" />
-            Vào phòng thi đấu (Player)
+            <Radio className="w-5 h-5" />
+            <span>Vào phòng thi đấu (Player)</span>
           </button>
           <button
             onClick={() => setActiveTab('create')}
-            className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+            className={`flex-1 py-3 px-5 rounded-xl text-sm sm:text-base font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
               activeTab === 'create'
-                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <PlusCircle className="w-4 h-4" />
-            Tạo phòng thi đấu (Host)
+            <PlusCircle className="w-5 h-5" />
+            <span>Tạo phòng thi đấu (Host)</span>
           </button>
         </div>
 
         {/* TAB 1: JOIN GAME ROOM (ONLY PIN INPUT - NO SUGGESTED ROOMS) */}
         {activeTab === 'join' && (
-          <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-6">
-            <div className="text-center space-y-2">
-              <div className="w-12 h-12 rounded-2xl bg-linear-to-tr from-indigo-600 to-blue-500 text-white flex items-center justify-center mx-auto shadow-md mb-2">
-                <Radio className="w-6 h-6" />
+          <div className="bg-white dark:bg-slate-900 p-8 sm:p-10 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl space-y-8">
+            <div className="text-center space-y-2.5">
+              <div className="w-14 h-14 rounded-2xl bg-linear-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center mx-auto shadow-md mb-2">
+                <Radio className="w-7 h-7" />
               </div>
-              <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+              <h2 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
                 Vào Phòng Thi Trực Tiếp
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+              <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
                 Nhập chính xác mã Game PIN 6 chữ số do Giảng viên hoặc người tạo phòng cung cấp để tham gia
               </p>
             </div>
 
             {joinError && (
-              <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-2 animate-in shake">
-                <AlertCircle className="w-4 h-4 shrink-0" />
+              <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-sm font-bold flex items-center gap-2.5 animate-in shake">
+                <AlertCircle className="w-5 h-5 shrink-0" />
                 <span>{joinError}</span>
               </div>
             )}
 
-            <form onSubmit={handleJoin} className="space-y-5">
+            <form onSubmit={handleJoin} className="space-y-6">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
                   Mã Game PIN (6 chữ số)
                 </label>
                 <input
@@ -318,12 +318,12 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
                   value={pin}
                   onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
                   placeholder="------"
-                  className="w-full text-center tracking-widest font-mono text-3xl sm:text-4xl font-black py-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-inner"
+                  className="w-full text-center tracking-widest font-mono text-4xl sm:text-5xl font-black py-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-inner"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
                   Tên hiển thị của bạn
                 </label>
                 <input
@@ -332,23 +332,23 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
                   value={playerName}
                   onChange={e => setPlayerName(e.target.value)}
                   placeholder="VD: Nguyễn Văn A"
-                  className="w-full px-4 py-3 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-5 py-3.5 text-base rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
                 />
               </div>
 
               {/* Avatar Picker */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">
                   Chọn hình đại diện
                 </label>
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-3">
                   {AVATARS.map((av, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => setSelectedAvatar(av)}
-                      className={`w-12 h-12 rounded-2xl overflow-hidden border-2 transition-transform cursor-pointer ${
-                        selectedAvatar === av ? 'border-indigo-600 scale-110 shadow-md ring-2 ring-indigo-300' : 'border-transparent opacity-60 hover:opacity-100'
+                      className={`w-14 h-14 rounded-2xl overflow-hidden border-2 transition-transform cursor-pointer ${
+                        selectedAvatar === av ? 'border-emerald-600 scale-110 shadow-md ring-3 ring-emerald-300' : 'border-transparent opacity-60 hover:opacity-100'
                       }`}
                     >
                       <img src={av} alt="Avatar" className="w-full h-full object-cover" />
@@ -360,19 +360,20 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
               <button
                 type="submit"
                 disabled={pin.length !== 6 || !playerName.trim()}
-                className="w-full py-3.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer disabled:cursor-not-allowed"
+                className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-base flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/25 cursor-pointer disabled:cursor-not-allowed"
               >
-                <span>Vào Đấu Trường</span>
-                <Send className="w-4 h-4" />
+                <span>Tham Gia Ngay</span>
+                <Radio className="w-5 h-5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={onBack}
+                className="w-full text-center text-sm font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer pt-2"
+              >
+                Quay lại
               </button>
             </form>
-
-            <button
-              onClick={onBack}
-              className="w-full text-center text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-            >
-              Quay lại Dashboard
-            </button>
           </div>
         )}
 

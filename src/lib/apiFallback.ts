@@ -444,6 +444,31 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
     }
   }
 
+  if (path.startsWith('/api/admin/users/') && path.endsWith('/reset-password') && method === 'POST') {
+    const id = path.split('/')[4];
+    try {
+      const pwd = body.newPassword || ('Pass@' + Math.floor(100000 + Math.random() * 900000));
+      const passwordHash = await hashPassword(pwd);
+      const localTarget = dataStore.getUserById(id);
+      let target = localTarget;
+      if (!target && isFirebaseConfigured()) {
+        target = await getFirebaseUserById(id);
+      }
+      if (!target) return makeJsonResponse({ success: false, error: { message: 'Không tìm thấy người dùng' } }, 404);
+
+      if (localTarget) {
+        dataStore.updateUser(id, { password: pwd }, body.actorId);
+      }
+      target.passwordHash = passwordHash;
+      if (isFirebaseConfigured()) {
+        await saveFirebaseUser(target);
+      }
+      return makeJsonResponse({ success: true, data: { newPassword: pwd } });
+    } catch (e: any) {
+      return makeJsonResponse({ success: false, error: { message: e.message } }, 400);
+    }
+  }
+
   if (path.startsWith('/api/admin/users/') && method === 'DELETE') {
     const id = path.split('/')[4];
     try {

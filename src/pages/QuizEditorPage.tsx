@@ -12,7 +12,9 @@ import {
   Upload, 
   HelpCircle,
   Clock,
-  Award
+  Award,
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { Quiz, Question, QuestionType, QuizDifficulty } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -42,6 +44,8 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
   const [showJsonModal, setShowJsonModal] = useState(false);
   const [jsonInput, setJsonInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [jsonError, setJsonError] = useState<string | null>(null);
 
   useEffect(() => {
     if (quizId) {
@@ -98,7 +102,7 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
 
   const handleDeleteQuestion = (index: number) => {
     if (questions.length <= 1) {
-      alert('Bài Quiz cần có tối thiểu 1 câu hỏi.');
+      setFormError('Bài Quiz cần có tối thiểu 1 câu hỏi.');
       return;
     }
     const updated = questions.filter((_, i) => i !== index);
@@ -120,8 +124,9 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
   };
 
   const handleSave = async () => {
+    setFormError(null);
     if (!title.trim()) {
-      alert('Vui lòng nhập tiêu đề bài Quiz');
+      setFormError('Vui lòng nhập tiêu đề bài Quiz');
       return;
     }
 
@@ -157,7 +162,7 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
         throw new Error(json.error?.message || 'Lỗi lưu bài Quiz');
       }
     } catch (e: any) {
-      alert(e.message || 'Lỗi khi lưu Quiz');
+      setFormError(e.message || 'Lỗi khi lưu Quiz');
     } finally {
       setIsSaving(false);
     }
@@ -191,6 +196,20 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
 
   return (
     <div className="space-y-6 animate-in fade-in pb-12">
+      {formError && (
+        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-medium flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{formError}</span>
+          </div>
+          <button
+            onClick={() => setFormError(null)}
+            className="p-1 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
       
       {/* Top action bar */}
       <div className="flex items-center justify-between">
@@ -600,9 +619,20 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
             <h3 className="font-bold text-sm text-slate-900 dark:text-white">Import / Export JSON Quiz</h3>
+            
+            {jsonError && (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{jsonError}</span>
+              </div>
+            )}
+
             <textarea
               value={jsonInput || JSON.stringify(questions, null, 2)}
-              onChange={e => setJsonInput(e.target.value)}
+              onChange={e => {
+                setJsonInput(e.target.value);
+                setJsonError(null);
+              }}
               rows={10}
               className="w-full p-3 font-mono text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 outline-none"
             />
@@ -615,14 +645,15 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
                       setQuestions(parsed);
                       setShowJsonModal(false);
                       setJsonInput('');
+                      setJsonError(null);
                     } else {
-                      alert('JSON phải là danh sách câu hỏi (Array)');
+                      setJsonError('JSON phải là danh sách câu hỏi (Array)');
                     }
                   } catch (e) {
-                    alert('Định dạng JSON không hợp lệ');
+                    setJsonError('Định dạng JSON không hợp lệ');
                   }
                 }}
-                className="flex-1 py-2 rounded-xl bg-indigo-600 text-white font-semibold text-xs"
+                className="flex-1 py-2 rounded-xl bg-indigo-600 text-white font-semibold text-xs cursor-pointer hover:bg-indigo-700"
               >
                 Nhập (Import JSON)
               </button>
@@ -630,8 +661,9 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
                 onClick={() => {
                   setShowJsonModal(false);
                   setJsonInput('');
+                  setJsonError(null);
                 }}
-                className="py-2 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-400"
+                className="py-2 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 Đóng
               </button>
