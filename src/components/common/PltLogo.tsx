@@ -7,9 +7,9 @@ interface PltLogoProps {
 
 export const PltLogo: React.FC<PltLogoProps> = ({ className = '', size = 'md' }) => {
   const heightStyles = {
-    sm: 'h-8',
-    md: 'h-10 sm:h-11',
-    lg: 'h-14',
+    sm: 'h-9 sm:h-10',
+    md: 'h-11 sm:h-12',
+    lg: 'h-16',
   }[size];
 
   return (
@@ -18,7 +18,7 @@ export const PltLogo: React.FC<PltLogoProps> = ({ className = '', size = 'md' })
       title="PLT Solutions"
     >
       <svg 
-        viewBox="0 0 160 80" 
+        viewBox="12 8 136 68" 
         className="h-full w-auto"
         fill="none" 
         xmlns="http://www.w3.org/2000/svg"
@@ -27,7 +27,7 @@ export const PltLogo: React.FC<PltLogoProps> = ({ className = '', size = 'md' })
         {/* PLT Main Brand Typography */}
         <text 
           x="80" 
-          y="52" 
+          y="50" 
           textAnchor="middle" 
           className="fill-[#2B3A8C] dark:fill-white"
           fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" 
@@ -40,12 +40,12 @@ export const PltLogo: React.FC<PltLogoProps> = ({ className = '', size = 'md' })
         {/* SOLUTIONS Sub-text with wide letter tracking */}
         <text 
           x="82" 
-          y="73" 
+          y="71" 
           textAnchor="middle" 
           className="fill-[#2B3A8C] dark:fill-slate-200"
           fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" 
           fontWeight="800" 
-          fontSize="10" 
+          fontSize="10.5" 
           letterSpacing="5.8"
         >
           SOLUTIONS
