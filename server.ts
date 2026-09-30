@@ -674,13 +674,15 @@ app.put('/api/quizzes/:id', (req, res) => {
   }
 });
 
-app.delete('/api/quizzes/:id', (req, res) => {
+app.delete('/api/quizzes/:id', async (req, res) => {
   try {
-    const success = dataStore.deleteQuiz(req.params.id);
-    if (!success) {
-      return res.status(404).json({ success: false, error: { message: 'Không tìm thấy Quiz' } });
+    const quizId = req.params.id;
+    dataStore.deleteQuiz(quizId);
+    try {
+      await deleteQuizFromFirestore(quizId);
+    } catch (e) {
+      console.warn('[Firestore] Async delete quiz failed:', e);
     }
-    deleteQuizFromFirestore(req.params.id).catch(e => console.warn('[Firestore] Async delete quiz failed:', e));
     res.json({ success: true, message: 'Đã xóa Quiz thành công' });
   } catch (err: any) {
     res.status(500).json({ success: false, error: { message: err.message } });

@@ -291,15 +291,21 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
   }
 
   if (path.startsWith('/api/quizzes/') && method === 'DELETE') {
-    const id = path.split('/')[3];
-    if (isFirebaseConfigured()) {
-      const db = getClientFirestore();
-      if (!db) return makeJsonResponse({ success: false, error: { message: 'Firebase chưa được cấu hình' } }, 500);
-      await deleteDoc(doc(db, 'quizzes', id));
-    } else {
+    const id = path.split('/')[3]?.split('?')[0];
+    if (id) {
+      if (isFirebaseConfigured()) {
+        try {
+          const db = getClientFirestore();
+          if (db) {
+            await deleteDoc(doc(db, 'quizzes', id));
+          }
+        } catch (err) {
+          console.warn('[Fallback] Error deleting quiz from Firestore:', err);
+        }
+      }
       dataStore.deleteQuiz(id);
     }
-    return makeJsonResponse({ success: true });
+    return makeJsonResponse({ success: true, message: 'Đã xóa Quiz thành công' });
   }
 
   if (path === '/api/quizzes/attempt' && method === 'POST') {

@@ -10,7 +10,10 @@ import {
   Trash2, 
   Layers, 
   Lock, 
-  ArrowRight
+  ArrowRight,
+  AlertCircle,
+  CheckCircle2,
+  X
 } from 'lucide-react';
 import { Quiz } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -30,6 +33,9 @@ export const QuizzesPage: React.FC<QuizzesPageProps> = ({ onNavigate }) => {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [difficultyFilter, setDifficultyFilter] = useState('ALL');
   const [isLoading, setIsLoading] = useState(true);
+  const [quizToDelete, setQuizToDelete] = useState<Quiz | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteFeedback, setDeleteFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const fetchQuizzes = async () => {
     setIsLoading(true);
@@ -63,6 +69,8 @@ export const QuizzesPage: React.FC<QuizzesPageProps> = ({ onNavigate }) => {
       });
       const json = await res.json();
       if (json.success) {
+        setDeleteFeedback({ type: 'success', message: 'Đã nhân bản Quiz thành công.' });
+        setTimeout(() => setDeleteFeedback(null), 3000);
         fetchQuizzes();
       }
     } catch (e) {
@@ -70,16 +78,33 @@ export const QuizzesPage: React.FC<QuizzesPageProps> = ({ onNavigate }) => {
     }
   };
 
-  const handleDelete = async (quizId: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa Quiz này? Thao tác không thể hoàn tác.')) return;
+  const confirmDelete = async () => {
+    if (!quizToDelete) return;
+    const targetId = quizToDelete.id;
+    const targetTitle = quizToDelete.title;
+    setIsDeleting(true);
+    setDeleteFeedback(null);
     try {
-      const res = await fetch(`/api/quizzes/${quizId}`, { method: 'DELETE' });
+      // Optimistic delete from UI state immediately
+      setQuizzes(prev => prev.filter(q => q.id !== targetId));
+
+      const res = await fetch(`/api/quizzes/${targetId}`, { method: 'DELETE' });
       const json = await res.json();
       if (json.success) {
+        setDeleteFeedback({ type: 'success', message: `Đã xóa Quiz "${targetTitle}" thành công.` });
+        setTimeout(() => setDeleteFeedback(null), 4000);
+        fetchQuizzes();
+      } else {
+        setDeleteFeedback({ type: 'error', message: json.error?.message || 'Không thể xóa Quiz' });
         fetchQuizzes();
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setDeleteFeedback({ type: 'error', message: e.message || 'Lỗi kết nối khi xóa Quiz' });
+      fetchQuizzes();
+    } finally {
+      setIsDeleting(false);
+      setQuizToDelete(null);
     }
   };
 
@@ -106,6 +131,30 @@ export const QuizzesPage: React.FC<QuizzesPageProps> = ({ onNavigate }) => {
   return (
     <div className="space-y-8 animate-in fade-in pb-16">
       
+      {/* Delete Feedback Toast/Banner */}
+      {deleteFeedback && (
+        <div className={`p-4 rounded-2xl flex items-center justify-between shadow-xs transition-all ${
+          deleteFeedback.type === 'success'
+            ? 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+            : 'bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-200'
+        }`}>
+          <div className="flex items-center gap-3">
+            {deleteFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            )}
+            <span className="text-sm font-semibold">{deleteFeedback.message}</span>
+          </div>
+          <button 
+            onClick={() => setDeleteFeedback(null)} 
+            className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer text-slate-500 hover:text-slate-700"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Header & Create Quiz Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -255,54 +304,54 @@ export const QuizzesPage: React.FC<QuizzesPageProps> = ({ onNavigate }) => {
               </div>
 
               {/* Action Buttons */}
-              <div className="p-6 pt-0">
-                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
+              <div className="px-4 pb-4 pt-0 sm:px-5 sm:pb-5">
+                <div className="pt-3.5 border-t border-slate-100 dark:border-slate-800 flex items-center gap-1.5 flex-nowrap">
                   <button
                     onClick={() => onNavigate('study', quiz.id)}
-                    className="flex-1 py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm sm:text-base font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+                    className={`${canManage ? 'shrink-0' : 'flex-1'} py-2 px-2.5 sm:px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs whitespace-nowrap`}
                   >
-                    <Play className="w-4 h-4 fill-current" />
+                    <Play className="w-3.5 h-3.5 fill-current" />
                     <span>Làm Solo</span>
                   </button>
 
                   <button
                     onClick={() => onNavigate('flashcards', quiz.id)}
-                    className="py-3 px-4 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm sm:text-base font-bold transition-colors cursor-pointer"
+                    className={`${canManage ? 'shrink-0' : 'flex-1'} py-2 px-2.5 sm:px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-bold transition-colors cursor-pointer whitespace-nowrap flex items-center justify-center`}
                   >
                     Flashcard
                   </button>
 
                   {canManage && (
-                    <>
+                    <div className="flex items-center gap-1 sm:gap-1.5 ml-auto shrink-0">
                       <button
                         onClick={() => onNavigate('host', quiz.id)}
                         title="Tổ chức thi đấu Kahoot Live"
-                        className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 text-amber-700 dark:text-amber-300 text-sm font-semibold border border-amber-200 dark:border-amber-800 transition-colors cursor-pointer"
+                        className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 text-amber-700 dark:text-amber-300 text-xs font-semibold border border-amber-200 dark:border-amber-800 transition-colors cursor-pointer flex items-center justify-center shrink-0"
                       >
-                        <Radio className="w-4 h-4" />
+                        <Radio className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDuplicate(quiz.id)}
                         title="Nhân bản Quiz"
-                        className="p-3 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                        className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-center shrink-0 transition-colors"
                       >
-                        <Copy className="w-4 h-4" />
+                        <Copy className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => onNavigate('edit-quiz', quiz.id)}
                         title="Chỉnh sửa Quiz"
-                        className="p-3 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                        className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-center shrink-0 transition-colors"
                       >
-                        <Edit className="w-4 h-4" />
+                        <Edit className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => handleDelete(quiz.id)}
+                        onClick={() => setQuizToDelete(quiz)}
                         title="Xóa Quiz"
-                        className="p-3 rounded-2xl border border-rose-200 dark:border-rose-900 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 cursor-pointer"
+                        className="w-8 h-8 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 dark:bg-rose-950/50 text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-900/50 cursor-pointer flex items-center justify-center shrink-0 transition-colors"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
@@ -335,6 +384,65 @@ export const QuizzesPage: React.FC<QuizzesPageProps> = ({ onNavigate }) => {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal (In-app, iframe safe) */}
+      {quizToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in zoom-in-95">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                  Xác nhận xóa Quiz
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Thao tác này sẽ xóa vĩnh viễn và không thể hoàn tác
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-1.5">
+              <p className="text-sm font-bold text-slate-900 dark:text-white line-clamp-2">
+                {quizToDelete.title}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Chuyên mục: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{quizToDelete.category}</span> • {quizToDelete.questions?.length || quizToDelete.questionCount || 0} câu hỏi
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setQuizToDelete(null)}
+                className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={confirmDelete}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm transition-colors cursor-pointer shadow-sm flex items-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Xóa vĩnh viễn</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
