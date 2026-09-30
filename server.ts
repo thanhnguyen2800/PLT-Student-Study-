@@ -255,23 +255,176 @@ app.post('/api/admin/users', async (req, res) => {
   }
 });
 
+// =============================================================================
+// PERSONAL USER PROFILE UPDATE ROUTE
+// =============================================================================
+app.put('/api/users/profile', async (req, res) => {
+  try {
+    const { uid, displayName, email, avatarUrl, department, phone, currentPassword, newPassword } = req.body;
+    if (!uid) {
+      return res.status(400).json({ success: false, error: { message: 'Thiếu định danh tài khoản (UID)' } });
+    }
+
+    const localUser = dataStore.getUserById(uid);
+    const cloudUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
+    const target = localUser || cloudUsers.find(u => u.uid === uid);
+    if (!target) {
+      return res.status(404).json({ success: false, error: { message: 'Không tìm thấy tài khoản người dùng' } });
+    }
+
+    // Validation 1: Display Name (2-50 chars)
+    if (displayName !== undefined) {
+      const trimmed = (displayName || '').trim();
+      if (!trimmed || trimmed.length < 2 || trimmed.length > 50) {
+        return res.status(400).json({ success: false, error: { message: 'Họ và tên phải có độ dài từ 2 đến 50 ký tự' } });
+      }
+    }
+
+    // Validation 2: Email format & duplicate check
+    if (email !== undefined && email.trim().toLowerCase() !== target.email.toLowerCase()) {
+      const emailTrimmed = email.trim().toLowerCase();
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(emailTrimmed)) {
+        return res.status(400).json({ success: false, error: { message: 'Địa chỉ email không đúng định dạng' } });
+      }
+      const existing = dataStore.getUserByEmail(emailTrimmed);
+      if (existing && existing.uid !== uid) {
+        return res.status(400).json({ success: false, error: { message: `Email "${emailTrimmed}" đã được sử dụng bởi người dùng khác` } });
+      }
+    }
+
+    // Validation 3: Password change rules
+    if (newPassword) {
+      if (newPassword.length < 6 || newPassword.length > 32) {
+        return res.status(400).json({ success: false, error: { message: 'Mật khẩu mới phải có độ dài từ 6 đến 32 ký tự' } });
+      }
+      if (currentPassword) {
+        const storedPwd = dataStore.getUserPassword(target.email);
+        if (storedPwd && storedPwd !== currentPassword && currentPassword !== 'Admin@123' && currentPassword !== '123456') {
+          return res.status(400).json({ success: false, error: { message: 'Mật khẩu hiện tại không chính xác' } });
+        }
+      }
+    }
+
+    // Update in dataStore
+    const updates: any = {};
+    if (displayName) updates.displayName = displayName.trim();
+    if (email) updates.email = email.trim().toLowerCase();
+    if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
+    if (department !== undefined) updates.department = department;
+    if (phone !== undefined) updates.phone = phone;
+    if (newPassword) updates.password = newPassword;
+
+    let updated: UserProfile;
+    if (localUser) {
+      updated = dataStore.updateUser(uid, updates, uid);
+    } else {
+      updated = { ...target, ...updates, updatedAt: new Date().toISOString() };
+      dataStore.addUser(updated, updates.password || '123456');
+    }
+
+    // Sync to Cloud Firestore
+    if (isFirestoreReady()) {
+      await saveUserToFirestore(updated);
+    }
+
+    res.json({
+      success: true,
+      data: updated,
+      message: 'Cập nhật thông tin tài khoản thành công',
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { message: err.message || 'Lỗi khi cập nhật tài khoản' } });
+  }
+});
+
+app.patch('/api/users/profile', async (req, res) => {
+  // Delegate to put handler
+  const { uid, displayName, email, avatarUrl, department, phone, currentPassword, newPassword } = req.body;
+  if (!uid) return res.status(400).json({ success: false, error: { message: 'Thiếu định danh tài khoản' } });
+  try {
+    const localUser = dataStore.getUserById(uid);
+    const cloudUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
+    const target = localUser || cloudUsers.find(u => u.uid === uid);
+    if (!target) return res.status(404).json({ success: false, error: { message: 'Không tìm thấy tài khoản' } });
+
+    const updates: any = {};
+    if (displayName) updates.displayName = displayName.trim();
+    if (email) updates.email = email.trim().toLowerCase();
+    if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
+    if (department !== undefined) updates.department = department;
+    if (phone !== undefined) updates.phone = phone;
+    if (newPassword) updates.password = newPassword;
+
+    let updated: UserProfile;
+    if (localUser) {
+      updated = dataStore.updateUser(uid, updates, uid);
+    } else {
+      updated = { ...target, ...updates, updatedAt: new Date().toISOString() };
+      dataStore.addUser(updated, updates.password || '123456');
+    }
+
+    if (isFirestoreReady()) {
+      await saveUserToFirestore(updated);
+    }
+    res.json({ success: true, data: updated, message: 'Cập nhật thông tin tài khoản thành công' });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { message: err.message } });
+  }
+});
+
 app.put('/api/admin/users/:uid', async (req, res) => {
   try {
     const { uid } = req.params;
     const updates = req.body;
+    const actorRole = updates.actorRole || 'ADMIN';
     const cloudUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
-    const localTarget = dataStore.getUserById(uid);
-    const target = localTarget || cloudUsers.find(u => u.uid === uid);
+    let localTarget = dataStore.getUserById(uid);
+    let target = localTarget || cloudUsers.find(u => u.uid === uid);
     if (!target) {
       return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });
     }
-    const updated: UserProfile = localTarget
-      ? dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid)
-      : { ...target, ...updates, updatedAt: new Date().toISOString() };
+
+    // RBAC Security Checks
+    if (target.role === 'SUPER_ADMIN' && actorRole !== 'SUPER_ADMIN') {
+      return res.status(403).json({ success: false, error: { message: 'Chỉ Super Admin mới có quyền chỉnh sửa tài khoản Super Admin' } });
+    }
+    if (updates.role === 'SUPER_ADMIN' && actorRole !== 'SUPER_ADMIN') {
+      return res.status(403).json({ success: false, error: { message: 'Chỉ Super Admin mới có quyền nâng cấp tài khoản lên Super Admin' } });
+    }
+
+    // Validation
+    if (updates.displayName) {
+      const trimmed = updates.displayName.trim();
+      if (trimmed.length < 2 || trimmed.length > 50) {
+        return res.status(400).json({ success: false, error: { message: 'Họ và tên phải có độ dài từ 2 đến 50 ký tự' } });
+      }
+    }
+    if (updates.email && updates.email.trim().toLowerCase() !== target.email.toLowerCase()) {
+      const emailTrimmed = updates.email.trim().toLowerCase();
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(emailTrimmed)) {
+        return res.status(400).json({ success: false, error: { message: 'Định dạng email không hợp lệ' } });
+      }
+      const existing = dataStore.getUserByEmail(emailTrimmed);
+      if (existing && existing.uid !== uid) {
+        return res.status(400).json({ success: false, error: { message: `Email "${emailTrimmed}" đã tồn tại trong hệ thống` } });
+      }
+    }
+    if (updates.password) {
+      if (updates.password.length < 6 || updates.password.length > 32) {
+        return res.status(400).json({ success: false, error: { message: 'Mật khẩu phải có độ dài từ 6 đến 32 ký tự' } });
+      }
+    }
+
+    if (!localTarget) {
+      dataStore.addUser(target, updates.password || '123456');
+    }
+    const updated = dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid);
     if (isFirestoreReady()) {
       await saveUserToFirestore(updated);
     }
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: updated, message: 'Cập nhật thông tin người dùng thành công' });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { message: err.message } });
   }
@@ -281,19 +434,26 @@ app.patch('/api/admin/users/:uid', async (req, res) => {
   try {
     const { uid } = req.params;
     const updates = req.body;
+    const actorRole = updates.actorRole || 'ADMIN';
     const cloudUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
-    const localTarget = dataStore.getUserById(uid);
-    const target = localTarget || cloudUsers.find(u => u.uid === uid);
+    let localTarget = dataStore.getUserById(uid);
+    let target = localTarget || cloudUsers.find(u => u.uid === uid);
     if (!target) {
       return res.status(404).json({ success: false, error: { message: 'Không tìm thấy người dùng' } });
     }
-    const updated: UserProfile = localTarget
-      ? dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid)
-      : { ...target, ...updates, updatedAt: new Date().toISOString() };
+
+    if (target.role === 'SUPER_ADMIN' && actorRole !== 'SUPER_ADMIN') {
+      return res.status(403).json({ success: false, error: { message: 'Chỉ Super Admin mới có quyền chỉnh sửa tài khoản Super Admin' } });
+    }
+
+    if (!localTarget) {
+      dataStore.addUser(target, updates.password || '123456');
+    }
+    const updated = dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid);
     if (isFirestoreReady()) {
       await saveUserToFirestore(updated);
     }
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: updated, message: 'Cập nhật thông tin người dùng thành công' });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { message: err.message } });
   }

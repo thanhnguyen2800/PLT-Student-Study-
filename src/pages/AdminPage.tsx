@@ -14,12 +14,14 @@ import {
   KeyRound, 
   CheckCircle2, 
   AlertCircle,
-  BarChart3
+  BarChart3,
+  Edit
 } from 'lucide-react';
 import { User, UserRole, UserStatus, AuditLog } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { RoleBadge, StatusBadge } from '../components/common/Badge';
 import { AuditLogViewer } from '../components/admin/AuditLogViewer';
+import { EditUserModal } from '../components/admin/EditUserModal';
 
 export const AdminPage: React.FC = () => {
   const { currentUser, canAccess } = useAuth();
@@ -29,6 +31,9 @@ export const AdminPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
   
+  // Edit User Modal State
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+
   // Create User Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -530,7 +535,7 @@ export const AdminPage: React.FC = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="w-full text-left text-xs min-w-[850px]">
                   <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-slate-500 font-semibold">
                     <tr>
                       <th className="p-4">Họ và tên / Email</th>
@@ -591,6 +596,17 @@ export const AdminPage: React.FC = () => {
                           <div className="flex items-center justify-end gap-1.5">
                             {canManageUser(user) ? (
                               <>
+                                <button
+                                  type="button"
+                                  id={`btn-edit-user-${user.uid}`}
+                                  onClick={() => setEditingUser(user)}
+                                  disabled={actionLoadingUid === user.uid}
+                                  title="Chỉnh sửa thông tin học viên / giảng viên"
+                                  className="px-2.5 py-1.5 rounded-lg border border-sky-200 text-sky-700 bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/40 dark:border-sky-800 dark:text-sky-400 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                  <span>Sửa</span>
+                                </button>
                                 <button
                                   type="button"
                                   id={`btn-reset-pwd-${user.uid}`}
@@ -1046,6 +1062,23 @@ export const AdminPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Edit User Modal */}
+      <EditUserModal
+        isOpen={!!editingUser}
+        user={editingUser}
+        currentUserRole={currentUser?.role}
+        existingUsers={users}
+        onClose={() => setEditingUser(null)}
+        onSaved={async () => {
+          setActionFeedback({
+            type: 'success',
+            message: 'Đã cập nhật thông tin và đồng bộ với Firebase thành công!',
+          });
+          await fetchUsers();
+          fetchLogs();
+        }}
+      />
 
     </div>
   );

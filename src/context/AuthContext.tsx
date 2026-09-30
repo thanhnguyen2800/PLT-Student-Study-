@@ -2,12 +2,23 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, UserRole } from '../types';
 import { INITIAL_USERS } from '../lib/db/initialData';
 
+export interface UpdateProfilePayload {
+  displayName?: string;
+  email?: string;
+  avatarUrl?: string;
+  department?: string;
+  phone?: string;
+  currentPassword?: string;
+  newPassword?: string;
+}
+
 interface AuthContextType {
   currentUser: UserProfile | null;
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  updateProfile: (payload: UpdateProfilePayload) => Promise<UserProfile>;
   quickSwitchUser: (email: string) => void;
   canAccess: (allowedRoles: UserRole[]) => boolean;
 }
@@ -97,6 +108,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem(TOKEN_STORAGE_KEY);
   };
 
+  const updateProfile = async (payload: UpdateProfilePayload): Promise<UserProfile> => {
+    if (!currentUser) throw new Error('Chưa đăng nhập');
+    const response = await fetch('/api/users/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        uid: currentUser.uid,
+        ...payload,
+      }),
+    });
+
+    const json = await response.json();
+    if (!response.ok || !json.success) {
+      throw new Error(json.error?.message || 'Không thể cập nhật hồ sơ cá nhân');
+    }
+
+    const updatedUser: UserProfile = json.data;
+    setCurrentUser(updatedUser);
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updatedUser));
+    return updatedUser;
+  };
+
   const quickSwitchUser = (email: string) => {
     const user = INITIAL_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
     if (user) {
@@ -122,6 +158,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         logout,
+        updateProfile,
         quickSwitchUser,
         canAccess,
       }}

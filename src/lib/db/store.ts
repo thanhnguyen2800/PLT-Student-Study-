@@ -211,6 +211,10 @@ class DataStore {
     return null;
   }
 
+  public getUserPassword(email: string): string | null {
+    return this.userPasswords.get(email.toLowerCase()) || null;
+  }
+
   public authenticate(email: string, passwordAttempt: string): { user: UserProfile } | null {
     const user = this.getUserByEmail(email);
     if (!user) return null;
@@ -300,6 +304,15 @@ class DataStore {
     });
 
     return newUser;
+  }
+
+  public addUser(user: UserProfile, password?: string): UserProfile {
+    this.users.set(user.uid, user);
+    if (password) {
+      this.userPasswords.set(user.email.toLowerCase(), password);
+    }
+    this.saveUsers();
+    return user;
   }
 
   public updateUser(uid: string, updates: Partial<UserProfile> & { password?: string }, actorUid?: string): UserProfile {

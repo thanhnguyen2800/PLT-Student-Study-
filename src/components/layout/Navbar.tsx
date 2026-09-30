@@ -6,11 +6,13 @@ import {
   Layers, 
   Menu, 
   X,
-  LogIn
+  LogIn,
+  UserCog
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { RoleBadge } from '../common/Badge';
 import { PltLogo } from '../common/PltLogo';
+import { ProfileModal } from '../profile/ProfileModal';
 
 interface NavbarProps {
   currentTab: string;
@@ -22,6 +24,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openA
   const { currentUser, logout, canAccess } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const handleNavClick = (tabId: string) => {
     if (tabId === 'tinhnang') {
@@ -57,22 +60,22 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openA
     }`;
 
   return (
-    <header className="sticky top-0 z-40 w-full overflow-x-clip bg-white/95 dark:bg-[#07192d]/95 backdrop-blur-md border-b border-sky-100 dark:border-sky-900/40 transition-colors">
+    <header className="sticky top-0 z-40 w-full bg-white/95 dark:bg-[#07192d]/95 backdrop-blur-md border-b border-sky-100 dark:border-sky-900/40 transition-colors">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-18 flex items-center justify-between gap-2 lg:gap-4 flex-nowrap">
         
         {/* Brand Logo */}
         <div 
-          className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group shrink-0 select-none" 
+          className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group shrink-0 select-none" 
           onClick={() => handleNavClick('intro')}
         >
           <PltLogo size="md" />
-          <span className="font-black text-xl lg:text-2xl tracking-tight bg-linear-to-r from-sky-700 via-sky-600 to-indigo-700 dark:from-sky-400 dark:to-cyan-300 bg-clip-text text-transparent whitespace-nowrap">
+          <span className="font-black text-lg sm:text-xl lg:text-2xl tracking-tight bg-linear-to-r from-sky-700 via-sky-600 to-indigo-700 dark:from-sky-400 dark:to-cyan-300 bg-clip-text text-transparent whitespace-nowrap">
             STUDENT STUDY
           </span>
         </div>
 
         {/* Desktop Navigation Links - Compact, single horizontal row, smaller font */}
-        <nav className="hidden md:flex items-center flex-nowrap gap-1 lg:gap-2 shrink">
+        <nav className="hidden lg:flex items-center flex-nowrap gap-1 lg:gap-1.5 shrink">
           
           {/* 1. Trang chủ */}
           <button
@@ -207,6 +210,17 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openA
 
                     <button
                       onClick={() => {
+                        setShowProfileModal(true);
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      <UserCog className="w-4 h-4 text-sky-600" />
+                      <span>Quản lý tài khoản</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
                         logout();
                         setShowUserMenu(false);
                         setCurrentTab('intro');
@@ -225,7 +239,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openA
           {/* Mobile Menu Toggle Button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+            className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
           >
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -235,7 +249,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openA
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pt-3 pb-6 space-y-2 animate-in slide-in-from-top-2">
+        <div className="lg:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pt-3 pb-6 space-y-2 animate-in slide-in-from-top-2">
           <button
             onClick={() => handleNavClick('intro')}
             className="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -299,7 +313,17 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openA
               </button>
             </div>
           ) : (
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+              <button
+                onClick={() => {
+                  setShowProfileModal(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full py-2.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <UserCog className="w-4 h-4" />
+                <span>Quản lý tài khoản cá nhân</span>
+              </button>
               <button
                 onClick={() => {
                   logout();
@@ -315,6 +339,12 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openA
           )}
         </div>
       )}
+
+      {/* Personal Profile Management Modal */}
+      <ProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
 
     </header>
   );

@@ -406,6 +406,102 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
     }
   }
 
+  if (path === '/api/users/profile' && (method === 'PUT' || method === 'PATCH')) {
+    try {
+      const { uid, displayName, email, avatarUrl, department, phone, currentPassword, newPassword } = body;
+      let target = dataStore.getUserById(uid);
+      if (!target && isFirebaseConfigured()) {
+        target = await getFirebaseUserById(uid);
+      }
+      if (!target) return makeJsonResponse({ success: false, error: { message: 'Không tìm thấy tài khoản người dùng' } }, 404);
+
+      if (displayName) {
+        const trimmed = displayName.trim();
+        if (trimmed.length < 2 || trimmed.length > 50) {
+          return makeJsonResponse({ success: false, error: { message: 'Họ và tên phải có độ dài từ 2 đến 50 ký tự' } }, 400);
+        }
+      }
+
+      if (email && email.trim().toLowerCase() !== target.email.toLowerCase()) {
+        const emailTrimmed = email.trim().toLowerCase();
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!emailRegex.test(emailTrimmed)) {
+          return makeJsonResponse({ success: false, error: { message: 'Địa chỉ email không đúng định dạng' } }, 400);
+        }
+        const existing = dataStore.getUserByEmail(emailTrimmed);
+        if (existing && existing.uid !== uid) {
+          return makeJsonResponse({ success: false, error: { message: `Email "${emailTrimmed}" đã được sử dụng bởi người dùng khác` } }, 400);
+        }
+      }
+
+      if (newPassword) {
+        if (newPassword.length < 6 || newPassword.length > 32) {
+          return makeJsonResponse({ success: false, error: { message: 'Mật khẩu mới phải có độ dài từ 6 đến 32 ký tự' } }, 400);
+        }
+      }
+
+      const updates: any = {};
+      if (displayName) updates.displayName = displayName.trim();
+      if (email) updates.email = email.trim().toLowerCase();
+      if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
+      if (department !== undefined) updates.department = department;
+      if (phone !== undefined) updates.phone = phone;
+      if (newPassword) updates.password = newPassword;
+
+      const updated: UserProfile = dataStore.getUserById(uid)
+        ? dataStore.updateUser(uid, updates, uid)
+        : { ...target, ...updates, updatedAt: new Date().toISOString() };
+
+      if (isFirebaseConfigured()) {
+        await saveFirebaseUser(updated);
+      }
+      return makeJsonResponse({ success: true, data: updated, message: 'Cập nhật thông tin tài khoản thành công' });
+    } catch (e: any) {
+      return makeJsonResponse({ success: false, error: { message: e.message } }, 400);
+    }
+  }
+
+  if (path.startsWith('/api/admin/users/') && (method === 'PUT' || method === 'PATCH') && !path.endsWith('/status') && !path.endsWith('/role') && !path.endsWith('/reset-password')) {
+    const id = path.split('/')[4];
+    try {
+      let target = dataStore.getUserById(id);
+      if (!target && isFirebaseConfigured()) {
+        target = await getFirebaseUserById(id);
+      }
+      if (!target) return makeJsonResponse({ success: false, error: { message: 'Không tìm thấy người dùng' } }, 404);
+
+      if (body.displayName) {
+        const trimmed = body.displayName.trim();
+        if (trimmed.length < 2 || trimmed.length > 50) {
+          return makeJsonResponse({ success: false, error: { message: 'Họ và tên phải có độ dài từ 2 đến 50 ký tự' } }, 400);
+        }
+      }
+
+      if (body.email && body.email.trim().toLowerCase() !== target.email.toLowerCase()) {
+        const emailTrimmed = body.email.trim().toLowerCase();
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!emailRegex.test(emailTrimmed)) {
+          return makeJsonResponse({ success: false, error: { message: 'Địa chỉ email không đúng định dạng' } }, 400);
+        }
+        const existing = dataStore.getUserByEmail(emailTrimmed);
+        if (existing && existing.uid !== id) {
+          return makeJsonResponse({ success: false, error: { message: `Email "${emailTrimmed}" đã tồn tại` } }, 400);
+        }
+      }
+
+      const updated: UserProfile = dataStore.getUserById(id)
+        ? dataStore.updateUser(id, body, body.actorId)
+        : { ...target, ...body, updatedAt: new Date().toISOString() };
+
+      if (isFirebaseConfigured()) {
+        await saveFirebaseUser(updated);
+      }
+      return makeJsonResponse({ success: true, data: updated, message: 'Cập nhật thông tin người dùng thành công' });
+    } catch (e: any) {
+      return makeJsonResponse({ success: false, error: { message: e.message } }, 400);
+    }
+  }
+
   if (path.startsWith('/api/admin/users/') && path.endsWith('/status') && (method === 'PATCH' || method === 'PUT')) {
     const id = path.split('/')[4];
     try {
