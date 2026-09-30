@@ -601,25 +601,11 @@ export const AdminPage: React.FC = () => {
                                   id={`btn-edit-user-${user.uid}`}
                                   onClick={() => setEditingUser(user)}
                                   disabled={actionLoadingUid === user.uid}
-                                  title="Chỉnh sửa thông tin học viên / giảng viên"
+                                  title="Chỉnh sửa thông tin và mật khẩu học viên / giảng viên"
                                   className="px-2.5 py-1.5 rounded-lg border border-sky-200 text-sky-700 bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/40 dark:border-sky-800 dark:text-sky-400 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50"
                                 >
                                   <Edit className="w-3.5 h-3.5" />
                                   <span>Sửa</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  id={`btn-reset-pwd-${user.uid}`}
-                                  onClick={() => {
-                                    setResetPasswordUser(user);
-                                    setNewResetPassword('');
-                                  }}
-                                  disabled={actionLoadingUid === user.uid}
-                                  title="Cấp lại mật khẩu mới cho người dùng này"
-                                  className="px-2.5 py-1.5 rounded-lg border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:border-indigo-800 dark:text-indigo-400 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50"
-                                >
-                                  <KeyRound className="w-3.5 h-3.5" />
-                                  <span>Đổi MK</span>
                                 </button>
                                 <button
                                   type="button"
