@@ -95,10 +95,20 @@ class DataStore {
       this.saveUsers();
     } else {
       loadedUsers.forEach(u => {
+        if (u.createdAt && u.createdAt.includes('2025')) {
+          u.createdAt = '2026-10-01T00:00:00.000Z';
+        }
         this.users.set(u.uid, u);
         this.userPasswords.set(u.email.toLowerCase(), 'Admin@123');
       });
     }
+
+    // Ensure all existing users in memory with 2025 dates are updated to 2026-10-01
+    this.users.forEach(u => {
+      if (u.createdAt && u.createdAt.includes('2025')) {
+        u.createdAt = '2026-10-01T00:00:00.000Z';
+      }
+    });
 
     if (loadedQuizzes.length === 0) {
       INITIAL_QUIZZES.forEach(q => this.quizzes.set(q.id, q));

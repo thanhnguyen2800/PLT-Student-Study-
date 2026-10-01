@@ -15,7 +15,9 @@ import {
   CheckCircle2, 
   AlertCircle,
   BarChart3,
-  Edit
+  Edit,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { User, UserRole, UserStatus, AuditLog } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -30,6 +32,10 @@ export const AdminPage: React.FC = () => {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
+  
+  // Pagination State (10 users per page)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 10;
   
   // Edit User Modal State
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -364,16 +370,63 @@ export const AdminPage: React.FC = () => {
   const userList = Array.isArray(users) ? users : [];
   const logList = Array.isArray(auditLogs) ? auditLogs : [];
 
-  const filteredUsers = userList.filter(u => {
-    if (!u) return false;
-    const name = (u.displayName || '').toLowerCase();
-    const email = (u.email || '').toLowerCase();
-    const dept = (u.department || '').toLowerCase();
-    const q = search.toLowerCase();
-    const matchSearch = name.includes(q) || email.includes(q) || dept.includes(q);
-    const matchRole = roleFilter === 'ALL' || u.role === roleFilter;
-    return matchSearch && matchRole;
-  });
+  // Reset page when filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, roleFilter]);
+
+  // Format date helper: standard DD/MM/YYYY, converting any 2025 date to today 01/10/2026
+  const formatCreationDate = (isoString?: string) => {
+    if (!isoString) return '01/10/2026';
+    if (isoString.includes('2025')) return '01/10/2026';
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) {
+        const parts = isoString.slice(0, 10).split('-');
+        if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        return isoString.slice(0, 10);
+      }
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return isoString.slice(0, 10);
+    }
+  };
+
+  const getCreatedAtTimestamp = (u: User) => {
+    const raw = u.createdAt;
+    if (!raw) return new Date('2026-10-01T00:00:00.000Z').getTime();
+    if (raw.includes('2025')) return new Date('2026-10-01T00:00:00.000Z').getTime();
+    const t = new Date(raw).getTime();
+    return isNaN(t) ? new Date('2026-10-01T00:00:00.000Z').getTime() : t;
+  };
+
+  const filteredUsers = userList
+    .filter(u => {
+      if (!u) return false;
+      const name = (u.displayName || '').toLowerCase();
+      const email = (u.email || '').toLowerCase();
+      const dept = (u.department || '').toLowerCase();
+      const q = search.toLowerCase();
+      const matchSearch = name.includes(q) || email.includes(q) || dept.includes(q);
+      const matchRole = roleFilter === 'ALL' || u.role === roleFilter;
+      return matchSearch && matchRole;
+    })
+    .sort((a, b) => {
+      // Sắp xếp: Tài khoản tạo trước thì số 1, tạo sau thì số 2, 3, 4... (createdAt tăng dần)
+      const diff = getCreatedAtTimestamp(a) - getCreatedAtTimestamp(b);
+      if (diff !== 0) return diff;
+      return (a.displayName || a.email || '').localeCompare(b.displayName || b.email || '');
+    });
+
+  // Pagination calculations (10 users / page)
+  const totalPages = Math.ceil(filteredUsers.length / pageSize) || 1;
+  const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredUsers.length);
+  const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
 
   const canManageUser = (user: User) => {
     if (!currentUser) return false;
@@ -538,6 +591,7 @@ export const AdminPage: React.FC = () => {
                 <table className="w-full text-left text-xs min-w-[850px]">
                   <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-slate-500 font-semibold">
                     <tr>
+                      <th className="p-4 text-center w-14 sm:w-16">STT</th>
                       <th className="p-4">Họ và tên / Email</th>
                       <th className="p-4">Vai trò (Role)</th>
                       <th className="p-4">Trạng thái</th>
@@ -547,115 +601,169 @@ export const AdminPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {filteredUsers.map(user => (
-                      <tr key={user.uid} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="p-4">
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={user.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80'}
-                              alt={user.displayName}
-                              className="w-8 h-8 rounded-xl object-cover"
-                            />
-                            <div>
-                              <p className="font-bold text-slate-900 dark:text-white">{user.displayName || 'Chưa đặt tên'}</p>
-                              <p className="text-[11px] text-slate-400 font-mono">{user.email}</p>
+                    {paginatedUsers.map((user, idx) => {
+                      const globalIndex = startIndex + idx + 1;
+                      return (
+                        <tr key={user.uid} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="p-4 text-center font-bold text-slate-500 dark:text-slate-400 font-mono text-xs">
+                            {globalIndex}
+                          </td>
+
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={user.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80'}
+                                alt={user.displayName}
+                                className="w-8 h-8 rounded-xl object-cover"
+                              />
+                              <div>
+                                <p className="font-bold text-slate-900 dark:text-white">{user.displayName || 'Chưa đặt tên'}</p>
+                                <p className="text-[11px] text-slate-400 font-mono">{user.email}</p>
+                              </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="p-4">
-                          {currentUser?.role === 'SUPER_ADMIN' ? (
-                            <select
-                              value={user.role}
-                              onChange={e => handleChangeRole(user, e.target.value as UserRole)}
-                              className="bg-transparent text-xs font-semibold cursor-pointer outline-none"
-                            >
-                              <option value="SUPER_ADMIN">👑 Super Admin</option>
-                              <option value="ADMIN">Quản trị viên</option>
-                              <option value="TEACHER">Giảng viên</option>
-                              <option value="PLAYER">Học viên</option>
-                            </select>
-                          ) : (
-                            <RoleBadge role={user.role} />
-                          )}
-                        </td>
-
-                        <td className="p-4">
-                          <StatusBadge status={user.status} />
-                        </td>
-
-                        <td className="p-4 text-slate-600 dark:text-slate-400">
-                          {user.department || 'Chung'}
-                        </td>
-
-                        <td className="p-4 text-slate-400 font-mono text-[11px]">
-                          {user.createdAt ? user.createdAt.slice(0, 10) : 'Mới tạo'}
-                        </td>
-
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {canManageUser(user) ? (
-                              <>
-                                <button
-                                  type="button"
-                                  id={`btn-edit-user-${user.uid}`}
-                                  onClick={() => setEditingUser(user)}
-                                  disabled={actionLoadingUid === user.uid}
-                                  title="Chỉnh sửa thông tin và mật khẩu học viên / giảng viên"
-                                  className="px-2.5 py-1.5 rounded-lg border border-sky-200 text-sky-700 bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/40 dark:border-sky-800 dark:text-sky-400 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50"
-                                >
-                                  <Edit className="w-3.5 h-3.5" />
-                                  <span>Sửa</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  id={`btn-toggle-status-${user.uid}`}
-                                  onClick={() => handleToggleStatus(user)}
-                                  disabled={actionLoadingUid === user.uid}
-                                  title={user.status === 'ACTIVE' ? 'Khóa tài khoản này' : 'Kích hoạt lại tài khoản này'}
-                                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50 ${
-                                    user.status === 'ACTIVE'
-                                      ? 'border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-400'
-                                      : 'border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400'
-                                  }`}
-                                >
-                                  {user.status === 'ACTIVE' ? (
-                                    <>
-                                      <Lock className="w-3.5 h-3.5" />
-                                      <span>Khóa</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Unlock className="w-3.5 h-3.5" />
-                                      <span>Mở khóa</span>
-                                    </>
-                                  )}
-                                </button>
-                                <button
-                                  type="button"
-                                  id={`btn-delete-user-${user.uid}`}
-                                  onClick={() => handleDeleteUser(user)}
-                                  disabled={actionLoadingUid === user.uid}
-                                  title="Xóa vĩnh viễn tài khoản khỏi Firebase và hệ thống"
-                                  className="px-2.5 py-1.5 rounded-lg border border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-400 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  <span>Xóa</span>
-                                </button>
-                              </>
+                          <td className="p-4">
+                            {currentUser?.role === 'SUPER_ADMIN' ? (
+                              <select
+                                value={user.role}
+                                onChange={e => handleChangeRole(user, e.target.value as UserRole)}
+                                className="bg-transparent text-xs font-semibold cursor-pointer outline-none"
+                              >
+                                <option value="SUPER_ADMIN">👑 Super Admin</option>
+                                <option value="ADMIN">Quản trị viên</option>
+                                <option value="TEACHER">Giảng viên</option>
+                                <option value="PLAYER">Học viên</option>
+                              </select>
                             ) : (
-                              <span className="text-[11px] text-slate-400 dark:text-slate-500 italic px-2 py-1">
-                                {currentUser?.uid === user.uid || (currentUser?.email && user.email && currentUser.email.toLowerCase() === user.email.toLowerCase())
-                                  ? '(Chính bạn)'
-                                  : '--'}
-                              </span>
+                              <RoleBadge role={user.role} />
                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+
+                          <td className="p-4">
+                            <StatusBadge status={user.status} />
+                          </td>
+
+                          <td className="p-4 text-slate-600 dark:text-slate-400">
+                            {user.department || 'Chung'}
+                          </td>
+
+                          <td className="p-4 text-slate-500 dark:text-slate-400 font-mono text-xs font-semibold">
+                            {formatCreationDate(user.createdAt)}
+                          </td>
+
+                          <td className="p-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {canManageUser(user) ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    id={`btn-edit-user-${user.uid}`}
+                                    onClick={() => setEditingUser(user)}
+                                    disabled={actionLoadingUid === user.uid}
+                                    title="Chỉnh sửa thông tin và mật khẩu học viên / giảng viên"
+                                    className="px-2.5 py-1.5 rounded-lg border border-sky-200 text-sky-700 bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/40 dark:border-sky-800 dark:text-sky-400 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                    <span>Sửa</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    id={`btn-toggle-status-${user.uid}`}
+                                    onClick={() => handleToggleStatus(user)}
+                                    disabled={actionLoadingUid === user.uid}
+                                    title={user.status === 'ACTIVE' ? 'Khóa tài khoản này' : 'Kích hoạt lại tài khoản này'}
+                                    className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50 ${
+                                      user.status === 'ACTIVE'
+                                        ? 'border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-400'
+                                        : 'border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400'
+                                    }`}
+                                  >
+                                    {user.status === 'ACTIVE' ? (
+                                      <>
+                                        <Lock className="w-3.5 h-3.5" />
+                                        <span>Khóa</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Unlock className="w-3.5 h-3.5" />
+                                        <span>Mở khóa</span>
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    id={`btn-delete-user-${user.uid}`}
+                                    onClick={() => handleDeleteUser(user)}
+                                    disabled={actionLoadingUid === user.uid}
+                                    title="Xóa vĩnh viễn tài khoản khỏi Firebase và hệ thống"
+                                    className="px-2.5 py-1.5 rounded-lg border border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-400 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Xóa</span>
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-[11px] text-slate-400 dark:text-slate-500 italic px-2 py-1">
+                                  {currentUser?.uid === user.uid || (currentUser?.email && user.email && currentUser.email.toLowerCase() === user.email.toLowerCase())
+                                    ? '(Chính bạn)'
+                                    : '--'}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* Pagination Controls Bar */}
+            {filteredUsers.length > 0 && (
+              <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-900/50">
+                <div className="flex items-center gap-2">
+                  <span>
+                    Hiển thị <strong className="text-slate-800 dark:text-slate-200">{filteredUsers.length === 0 ? 0 : startIndex + 1}</strong> - <strong className="text-slate-800 dark:text-slate-200">{endIndex}</strong> trong tổng số <strong className="text-indigo-600 dark:text-indigo-400">{filteredUsers.length}</strong> tài khoản
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={safeCurrentPage <= 1}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all flex items-center gap-1 font-semibold"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Trước</span>
+                  </button>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center ${
+                          safeCurrentPage === pageNum
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={safeCurrentPage >= totalPages}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all flex items-center gap-1 font-semibold"
+                  >
+                    <span>Sau</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             )}
           </div>

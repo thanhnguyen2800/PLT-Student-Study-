@@ -169,9 +169,19 @@ app.get('/api/admin/users', async (req, res) => {
     const { search, role, status } = req.query;
     const firestoreUsers = isFirestoreReady() ? await loadAllUsersFromFirestore() : [];
     if (isFirestoreReady() && firestoreUsers.length > 0) {
+      firestoreUsers.forEach(u => {
+        if (u.createdAt && u.createdAt.includes('2025')) {
+          u.createdAt = '2026-10-01T00:00:00.000Z';
+        }
+      });
       dataStore.setUsers(firestoreUsers);
     }
     const sourceUsers = firestoreUsers.length > 0 ? firestoreUsers : dataStore.listUsers({ limit: 1000 }).users;
+    sourceUsers.forEach(u => {
+      if (u.createdAt && u.createdAt.includes('2025')) {
+        u.createdAt = '2026-10-01T00:00:00.000Z';
+      }
+    });
     const queryText = String(search || '').toLowerCase();
     const filteredUsers = sourceUsers.filter(user => {
       const matchSearch = !queryText ||
@@ -182,6 +192,19 @@ app.get('/api/admin/users', async (req, res) => {
       const matchStatus = !status || status === 'ALL' || user.status === status;
       return matchSearch && matchRole && matchStatus;
     });
+
+    // Sắp xếp tài khoản theo thứ tự tạo trước đến tạo sau (tạo trước = số 1, tạo sau = số 2, 3, ...)
+    filteredUsers.sort((a, b) => {
+      const getT = (u: any) => {
+        if (!u.createdAt) return new Date('2026-10-01T00:00:00.000Z').getTime();
+        const t = new Date(u.createdAt).getTime();
+        return isNaN(t) ? new Date('2026-10-01T00:00:00.000Z').getTime() : t;
+      };
+      const diff = getT(a) - getT(b);
+      if (diff !== 0) return diff;
+      return (a.displayName || a.email || '').localeCompare(b.displayName || b.email || '');
+    });
+
     res.json({
       success: true,
       data: filteredUsers,
@@ -1427,6 +1450,21 @@ async function initFirestoreBackendSync() {
         allUsers.push(initialUser);
       }
     }
+
+    // Auto-update users that have 2025 creation date to 1/10/2026 (2026-10-01)
+    for (const user of allUsers) {
+      if (user.createdAt && user.createdAt.includes('2025')) {
+        user.createdAt = '2026-10-01T00:00:00.000Z';
+        user.updatedAt = new Date().toISOString();
+        try {
+          await saveUserToFirestore(user);
+          console.log(`[Firestore Sync] Auto-updated creation date for ${user.email} from 2025 to 2026-10-01.`);
+        } catch (err) {
+          console.warn(`[Firestore Sync] Could not update user ${user.email} in Firestore:`, err);
+        }
+      }
+    }
+
     dataStore.setUsers(allUsers);
     console.log(`[Firestore Sync] Synchronized ${allUsers.length} total users with Cloud Firestore.`);
 
