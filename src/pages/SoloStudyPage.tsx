@@ -11,7 +11,9 @@ import {
   ChevronRight,
   Flame,
   HelpCircle,
-  Lock
+  Lock,
+  CheckSquare,
+  ListChecks
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Quiz, Question, QuizAttempt } from '../types';
@@ -31,6 +33,7 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<any>(null);
+  const [selectedMultiple, setSelectedMultiple] = useState<number[]>([]);
   const [isAnswerSubmitted, setIsAnswerSubmitted] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(20);
   const [score, setScore] = useState(0);
@@ -62,6 +65,7 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
   // Active question
   const questionsList = isReviewMode ? wrongQuestions : (quiz?.questions || []);
   const currentQ = questionsList[currentIndex];
+  const isMultipleSelect = Boolean(currentQ && (currentQ.type === 'MULTIPLE_SELECT' || Array.isArray(currentQ.correctAnswer)));
 
   // Timer loop
   useEffect(() => {
@@ -86,7 +90,18 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
 
   const handleTimeExpired = () => {
     if (isAnswerSubmitted) return;
-    handleSubmitAnswer(-1, true);
+    if (isMultipleSelect) {
+      handleSubmitAnswer(selectedMultiple.length > 0 ? selectedMultiple : -1, true);
+    } else {
+      handleSubmitAnswer(-1, true);
+    }
+  };
+
+  const toggleMultipleOption = (idx: number) => {
+    if (isAnswerSubmitted) return;
+    setSelectedMultiple(prev =>
+      prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx].sort((a, b) => a - b)
+    );
   };
 
   const handleSubmitAnswer = (answerIdx: any, isTimeout: boolean = false) => {
@@ -96,12 +111,15 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
     setIsAnswerSubmitted(true);
 
     let isCorrect = false;
-    if (!isTimeout) {
+    if (!isTimeout && answerIdx !== -1) {
       if (Array.isArray(currentQ.correctAnswer)) {
-        if (Array.isArray(answerIdx)) {
-          isCorrect = currentQ.correctAnswer.length === answerIdx.length &&
-            currentQ.correctAnswer.every(val => answerIdx.includes(val));
-        }
+        const correctArr = currentQ.correctAnswer.map(Number);
+        const userArr = Array.isArray(answerIdx) ? answerIdx.map(Number) : [Number(answerIdx)];
+        isCorrect = correctArr.length === userArr.length &&
+          correctArr.every(val => userArr.includes(val)) &&
+          userArr.every(val => correctArr.includes(val));
+      } else if (Array.isArray(answerIdx)) {
+        isCorrect = answerIdx.length === 1 && Number(answerIdx[0]) === Number(currentQ.correctAnswer);
       } else {
         isCorrect = Number(currentQ.correctAnswer) === Number(answerIdx);
       }
@@ -127,6 +145,7 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
     if (currentIndex + 1 < questionsList.length) {
       setCurrentIndex(prev => prev + 1);
       setSelectedAnswer(null);
+      setSelectedMultiple([]);
       setIsAnswerSubmitted(false);
     } else {
       // Finished Quiz
@@ -181,11 +200,15 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
   const isCurrentCorrect = (): boolean => {
     if (!currentQ || selectedAnswer === null || selectedAnswer === -1) return false;
     if (Array.isArray(currentQ.correctAnswer)) {
-      return Array.isArray(selectedAnswer) &&
-        currentQ.correctAnswer.length === selectedAnswer.length &&
-        currentQ.correctAnswer.every(val => selectedAnswer.includes(val));
+      if (!Array.isArray(selectedAnswer)) return false;
+      const correctArr = currentQ.correctAnswer.map(Number);
+      const userArr = selectedAnswer.map(Number);
+      return correctArr.length === userArr.length &&
+        correctArr.every(val => userArr.includes(val)) &&
+        userArr.every(val => correctArr.includes(val));
     }
-    return Number(currentQ.correctAnswer) === Number(selectedAnswer);
+    const userVal = Array.isArray(selectedAnswer) ? (selectedAnswer.length === 1 ? Number(selectedAnswer[0]) : -999) : Number(selectedAnswer);
+    return Number(currentQ.correctAnswer) === userVal;
   };
 
   const startReviewMode = () => {
@@ -193,6 +216,7 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
     setIsReviewMode(true);
     setCurrentIndex(0);
     setSelectedAnswer(null);
+    setSelectedMultiple([]);
     setIsAnswerSubmitted(false);
     setIsFinished(false);
     setScore(0);
@@ -296,6 +320,7 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
                 setIsReviewMode(false);
                 setCurrentIndex(0);
                 setSelectedAnswer(null);
+                setSelectedMultiple([]);
                 setIsAnswerSubmitted(false);
                 setIsFinished(false);
                 setScore(0);
@@ -386,21 +411,43 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
           </div>
         )}
 
+        {/* Multi-Select Instructions Badge */}
+        {isMultipleSelect && (
+          <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-200 text-xs sm:text-sm font-bold shadow-xs">
+            <ListChecks className="w-5 h-5 text-purple-600 dark:text-purple-400 shrink-0" />
+            <span>Câu hỏi chọn nhiều đáp án đúng: Bạn có thể chọn nhiều phương án rồi nhấn nút "Xác nhận câu trả lời" bên dưới.</span>
+          </div>
+        )}
+
         {/* Options List */}
-        <div className="space-y-4">
+        <div className="space-y-3.5">
           {currentQ.options.map((opt, idx) => {
-            const isSelected = selectedAnswer === idx;
-            const isCorrectOption = Array.isArray(currentQ.correctAnswer)
-              ? (currentQ.correctAnswer as number[]).includes(idx)
-              : Number(currentQ.correctAnswer) === idx;
+            const isCorrectOption = (Array.isArray(currentQ.correctAnswer)
+              ? currentQ.correctAnswer.map(Number)
+              : [Number(currentQ.correctAnswer)]
+            ).includes(idx);
+
+            const isChecked = isMultipleSelect
+              ? (isAnswerSubmitted
+                  ? (Array.isArray(selectedAnswer) ? selectedAnswer.map(Number).includes(idx) : Number(selectedAnswer) === idx)
+                  : selectedMultiple.includes(idx))
+              : (isAnswerSubmitted
+                  ? Number(selectedAnswer) === idx
+                  : false);
 
             let btnStyle = 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:border-emerald-500';
 
-            if (isAnswerSubmitted) {
-              if (isCorrectOption) {
+            if (!isAnswerSubmitted) {
+              if (isMultipleSelect && isChecked) {
+                btnStyle = 'border-purple-600 dark:border-purple-500 bg-purple-50/70 dark:bg-purple-950/60 text-purple-950 dark:text-purple-100 font-bold shadow-xs';
+              }
+            } else {
+              if (isCorrectOption && isChecked) {
                 btnStyle = 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 font-bold';
-              } else if (isSelected) {
-                btnStyle = 'border-rose-500 bg-rose-50 dark:bg-rose-950/60 text-rose-900 dark:text-rose-200';
+              } else if (isCorrectOption && !isChecked) {
+                btnStyle = 'border-emerald-400 border-dashed bg-emerald-50/40 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300';
+              } else if (!isCorrectOption && isChecked) {
+                btnStyle = 'border-rose-500 bg-rose-50 dark:bg-rose-950/60 text-rose-900 dark:text-rose-200 font-bold';
               } else {
                 btnStyle = 'opacity-40 border-slate-200 dark:border-slate-800';
               }
@@ -409,31 +456,107 @@ export const SoloStudyPage: React.FC<SoloStudyProps> = ({ quizId, onBack, onRequ
             return (
               <button
                 key={idx}
+                type="button"
                 disabled={isAnswerSubmitted}
-                onClick={() => handleSubmitAnswer(idx)}
-                className={`w-full text-left p-5 rounded-2xl border-2 text-base sm:text-lg font-semibold transition-all flex items-center justify-between gap-4 shadow-xs cursor-pointer ${btnStyle}`}
+                onClick={() => {
+                  if (isMultipleSelect) {
+                    toggleMultipleOption(idx);
+                  } else {
+                    handleSubmitAnswer(idx);
+                  }
+                }}
+                className={`w-full text-left p-4 sm:p-5 rounded-2xl border-2 text-base sm:text-lg font-semibold transition-all flex items-center justify-between gap-4 shadow-xs cursor-pointer ${btnStyle}`}
               >
                 <div className="flex items-center gap-3.5">
-                  <span className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center font-black text-sm">
+                  {isMultipleSelect && (
+                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                      isChecked
+                        ? (isAnswerSubmitted
+                            ? (isCorrectOption ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white')
+                            : 'bg-purple-600 text-white')
+                        : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700'
+                    }`}>
+                      {isChecked ? <CheckSquare className="w-4 h-4" /> : null}
+                    </div>
+                  )}
+
+                  <span className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center font-black text-sm shrink-0">
                     {String.fromCharCode(65 + idx)}
                   </span>
-                  <span>{opt}</span>
+                  <span className="flex-1">{opt}</span>
                 </div>
 
-                {isAnswerSubmitted && isCorrectOption && (
-                  <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0" />
-                )}
-                {isAnswerSubmitted && isSelected && !isCorrectOption && (
-                  <XCircle className="w-6 h-6 text-rose-500 shrink-0" />
-                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  {isAnswerSubmitted && isCorrectOption && isChecked && (
+                    <span className="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-100/60 dark:bg-emerald-950 px-2.5 py-1 rounded-full">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Đúng</span>
+                    </span>
+                  )}
+                  {isAnswerSubmitted && isCorrectOption && !isChecked && (
+                    <span className="flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-100/60 dark:bg-amber-950 px-2.5 py-1 rounded-full">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Bỏ sót</span>
+                    </span>
+                  )}
+                  {isAnswerSubmitted && !isCorrectOption && isChecked && (
+                    <span className="flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-100/60 dark:bg-rose-950 px-2.5 py-1 rounded-full">
+                      <XCircle className="w-4 h-4" />
+                      <span>Chọn sai</span>
+                    </span>
+                  )}
+                </div>
               </button>
             );
           })}
         </div>
 
+        {/* Multi-select confirm button */}
+        {isMultipleSelect && !isAnswerSubmitted && (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => handleSubmitAnswer(selectedMultiple)}
+              disabled={selectedMultiple.length === 0}
+              className="w-full py-4 px-6 rounded-2xl bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold text-base flex items-center justify-center gap-2 shadow-lg shadow-purple-600/20 transition-all cursor-pointer"
+            >
+              <CheckCircle2 className="w-5 h-5" />
+              <span>
+                {selectedMultiple.length > 0
+                  ? `Xác nhận câu trả lời (Đã chọn ${selectedMultiple.length} đáp án)`
+                  : 'Vui lòng chọn ít nhất 1 đáp án để xác nhận'}
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* Explanation & Next Button */}
         {isAnswerSubmitted && (
           <div className="space-y-5 pt-6 border-t border-slate-100 dark:border-slate-800 animate-in fade-in">
+            {isCurrentCorrect() ? (
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 flex items-center gap-3">
+                <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+                <div>
+                  <p className="font-extrabold text-sm sm:text-base">Chính xác tuyệt đối!</p>
+                  <p className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-300">
+                    Bạn đã trả lời đúng tất cả các yêu cầu của câu hỏi (+{currentQ.points || 100} điểm)
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-200 flex items-center gap-3">
+                <XCircle className="w-6 h-6 text-rose-600 shrink-0" />
+                <div>
+                  <p className="font-extrabold text-sm sm:text-base">Chưa chính xác!</p>
+                  <p className="text-xs sm:text-sm text-rose-700 dark:text-rose-300">
+                    {isMultipleSelect
+                      ? 'Dạng câu hỏi chọn nhiều đáp án đúng yêu cầu chọn đủ và chính xác tất cả các phương án đúng.'
+                      : 'Đáp án bạn chọn chưa chính xác.'}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {currentQ.explanation && (
               <div className="p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 text-sm sm:text-base text-emerald-950 dark:text-emerald-200 space-y-1.5">
                 <p className="font-extrabold flex items-center gap-2">

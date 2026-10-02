@@ -752,9 +752,18 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
         const questionAnswers = { ...(answers[answerKey] || {}) };
         if (!questionAnswers[player.id]) {
           const answer = body.answer ?? body.answerIndex;
-          const isCorrect = Array.isArray(question.correctAnswer)
-            ? Array.isArray(answer) && question.correctAnswer.length === answer.length && question.correctAnswer.every(value => answer.includes(value))
-            : Number(question.correctAnswer) === Number(answer);
+          let isCorrect = false;
+          if (Array.isArray(question.correctAnswer)) {
+            const correctArr = question.correctAnswer.map(Number);
+            const userArr = Array.isArray(answer) ? answer.map(Number) : [Number(answer)];
+            isCorrect = correctArr.length === userArr.length &&
+              correctArr.every(val => userArr.includes(val)) &&
+              userArr.every(val => correctArr.includes(val));
+          } else if (Array.isArray(answer)) {
+            isCorrect = answer.length === 1 && Number(answer[0]) === Number(question.correctAnswer);
+          } else {
+            isCorrect = Number(question.correctAnswer) === Number(answer);
+          }
           const points = isCorrect ? question.points || 1000 : 0;
           if (isCorrect) player.score = (player.score || 0) + points;
           questionAnswers[player.id] = { answer, isCorrect, pointsEarned: points, score: points, answeredAt: Date.now() };

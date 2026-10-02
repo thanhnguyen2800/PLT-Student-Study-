@@ -404,17 +404,24 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
 
         {/* Question Header Card */}
         <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-4 text-center">
-          <div className="flex items-center justify-center gap-2">
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-              {currentQ.question}
-            </h2>
-            <button
-              onClick={() => speakText(currentQ.question)}
-              title="Đọc câu hỏi TTS"
-              className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 hover:text-indigo-600"
-            >
-              <Volume2 className="w-4 h-4" />
-            </button>
+          <div className="flex flex-col items-center justify-center gap-2">
+            {(currentQ.type === 'MULTIPLE_SELECT' || Array.isArray(currentQ.correctAnswer)) && (
+              <span className="px-3 py-1 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-xs font-extrabold uppercase tracking-wide">
+                Dạng câu hỏi: Chọn nhiều đáp án đúng
+              </span>
+            )}
+            <div className="flex items-center justify-center gap-2">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                {currentQ.question}
+              </h2>
+              <button
+                onClick={() => speakText(currentQ.question)}
+                title="Đọc câu hỏi TTS"
+                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 hover:text-indigo-600 cursor-pointer"
+              >
+                <Volume2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {currentQ.imageUrl && (
@@ -428,7 +435,9 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {currentQ.options.map((opt, idx) => {
             const color = kahootColors[idx] || kahootColors[0];
-            const isCorrect = Number(currentQ.correctAnswer) === idx;
+            const isCorrect = Array.isArray(currentQ.correctAnswer)
+              ? currentQ.correctAnswer.map(Number).includes(idx)
+              : Number(currentQ.correctAnswer) === idx;
 
             return (
               <div

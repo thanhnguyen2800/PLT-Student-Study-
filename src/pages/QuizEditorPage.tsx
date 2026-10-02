@@ -325,22 +325,9 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
 
           {/* Cover Image & AI Generator Affordance */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Ảnh bìa bài Quiz
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setImageModalTarget('cover');
-                  setShowImageModal(true);
-                }}
-                className="text-[11px] font-bold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1"
-              >
-                <Sparkles className="w-3 h-3" />
-                Sinh ảnh AI (1K/2K/4K)
-              </button>
-            </div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Ảnh bìa bài Quiz
+            </label>
 
             <input
               type="text"
@@ -430,8 +417,17 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
                       if (newType === 'TRUE_FALSE') {
                         updateActiveQuestion('options', ['Đúng', 'Sai']);
                         updateActiveQuestion('correctAnswer', 0);
-                      } else if (newType === 'MULTIPLE_CHOICE' && activeQ.options.length < 4) {
-                        updateActiveQuestion('options', ['Lựa chọn A', 'Lựa chọn B', 'Lựa chọn C', 'Lựa chọn D']);
+                      } else if (newType === 'MULTIPLE_CHOICE') {
+                        if (activeQ.options.length < 4) {
+                          updateActiveQuestion('options', ['Lựa chọn A', 'Lựa chọn B', 'Lựa chọn C', 'Lựa chọn D']);
+                        }
+                        if (Array.isArray(activeQ.correctAnswer)) {
+                          updateActiveQuestion('correctAnswer', Number(activeQ.correctAnswer[0] ?? 0));
+                        }
+                      } else if (newType === 'MULTIPLE_SELECT') {
+                        if (!Array.isArray(activeQ.correctAnswer)) {
+                          updateActiveQuestion('correctAnswer', [Number(activeQ.correctAnswer ?? 0)]);
+                        }
                       }
                     }}
                     className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none"
@@ -489,27 +485,14 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
               {/* Image Question Attachment */}
               {activeQ.type === 'IMAGE_QUESTION' && (
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      Hình ảnh minh họa câu hỏi
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setImageModalTarget('question');
-                        setShowImageModal(true);
-                      }}
-                      className="text-[11px] font-bold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1"
-                    >
-                      <Sparkles className="w-3 h-3" />
-                      Tạo ảnh AI (1K/2K/4K)
-                    </button>
-                  </div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Hình ảnh minh họa câu hỏi
+                  </label>
                   <input
                     type="text"
                     value={activeQ.imageUrl || ''}
                     onChange={e => updateActiveQuestion('imageUrl', e.target.value)}
-                    placeholder="URL hình ảnh hoặc tạo bằng AI..."
+                    placeholder="URL hình ảnh minh họa (https://...)..."
                     className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 outline-none"
                   />
                   {activeQ.imageUrl && (
@@ -529,8 +512,8 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
                 <div className="space-y-2">
                   {activeQ.options.map((opt, oIdx) => {
                     const isSelected = activeQ.type === 'MULTIPLE_SELECT'
-                      ? Array.isArray(activeQ.correctAnswer) && (activeQ.correctAnswer as number[]).includes(oIdx)
-                      : Number(activeQ.correctAnswer) === oIdx;
+                      ? Array.isArray(activeQ.correctAnswer) && activeQ.correctAnswer.map(Number).includes(oIdx)
+                      : (Array.isArray(activeQ.correctAnswer) ? Number(activeQ.correctAnswer[0] ?? 0) === oIdx : Number(activeQ.correctAnswer) === oIdx);
 
                     return (
                       <div
@@ -547,10 +530,12 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
                           checked={isSelected}
                           onChange={() => {
                             if (activeQ.type === 'MULTIPLE_SELECT') {
-                              const currentArr = Array.isArray(activeQ.correctAnswer) ? [...activeQ.correctAnswer] : [];
+                              const currentArr = Array.isArray(activeQ.correctAnswer)
+                                ? [...activeQ.correctAnswer].map(Number)
+                                : [Number(activeQ.correctAnswer ?? 0)];
                               const nextArr = currentArr.includes(oIdx)
                                 ? currentArr.filter(x => x !== oIdx)
-                                : [...currentArr, oIdx];
+                                : [...currentArr, oIdx].sort((a, b) => a - b);
                               updateActiveQuestion('correctAnswer', nextArr);
                             } else {
                               updateActiveQuestion('correctAnswer', oIdx);

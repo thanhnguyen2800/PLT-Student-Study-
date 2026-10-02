@@ -14,7 +14,9 @@ import {
   HelpCircle,
   AlertCircle,
   Lock,
-  ShieldAlert
+  ShieldAlert,
+  CheckSquare,
+  ListChecks
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -51,7 +53,8 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
   const [joinedSession, setJoinedSession] = useState<GameSession | null>(null);
   const [playerId, setPlayerId] = useState<string>('');
   const [quiz, setQuiz] = useState<Quiz | null>(null);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [selectedAnswer, setSelectedAnswer] = useState<any>(null);
+  const [selectedMultiple, setSelectedMultiple] = useState<number[]>([]);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [answerResult, setAnswerResult] = useState<{ isCorrect: boolean; points: number } | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(20);
@@ -97,6 +100,7 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
           if (updated) {
             if (updated.currentQuestionIndex !== joinedSession.currentQuestionIndex) {
               setSelectedAnswer(null);
+              setSelectedMultiple([]);
               setHasAnswered(false);
               setAnswerResult(null);
             }
@@ -129,6 +133,7 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
           // Check if moved to new question
           if (updatedSession.currentQuestionIndex !== joinedSession.currentQuestionIndex) {
             setSelectedAnswer(null);
+            setSelectedMultiple([]);
             setHasAnswered(false);
             setAnswerResult(null);
           }
@@ -201,9 +206,16 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
     }
   };
 
-  const handleSelectOption = async (optionIndex: number) => {
+  const togglePlayerMultipleOption = (optionIndex: number) => {
     if (hasAnswered || !joinedSession) return;
-    setSelectedAnswer(optionIndex);
+    setSelectedMultiple(prev =>
+      prev.includes(optionIndex) ? prev.filter(i => i !== optionIndex) : [...prev, optionIndex].sort((a, b) => a - b)
+    );
+  };
+
+  const handleSubmitPlayerAnswer = async (answerVal: any) => {
+    if (hasAnswered || !joinedSession) return;
+    setSelectedAnswer(answerVal);
     setHasAnswered(true);
 
     const currentQ = 
@@ -221,7 +233,7 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
         body: JSON.stringify({
           playerId,
           questionId: currentQ?.id || ('q_' + joinedSession.currentQuestionIndex),
-          answer: optionIndex,
+          answer: answerVal,
           timeTaken: timeSpent,
         }),
       });
@@ -236,6 +248,10 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleSelectOption = (optionIndex: number) => {
+    handleSubmitPlayerAnswer(optionIndex);
   };
 
   // Find my current player state
@@ -616,6 +632,7 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
     joinedSession.currentQuestion || 
     joinedSession.questions?.[joinedSession.currentQuestionIndex];
 
+  const isMultipleSelect = Boolean(currentQ && (currentQ.type === 'MULTIPLE_SELECT' || Array.isArray(currentQ.correctAnswer)));
   const questionText = currentQ?.question || (currentQ as any)?.text || `Câu hỏi số ${joinedSession.currentQuestionIndex + 1}`;
   const questionOptions: string[] = currentQ?.options || ['Phương án A', 'Phương án B', 'Phương án C', 'Phương án D'];
   const totalQuestions = joinedSession.totalQuestions || quiz?.questions?.length || joinedSession.questions?.length || 1;
@@ -666,6 +683,13 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
             </span>
           </div>
 
+          {isMultipleSelect && (
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs sm:text-sm font-bold">
+              <ListChecks className="w-4 h-4 text-purple-600 shrink-0" />
+              <span>Câu hỏi chọn nhiều đáp án đúng: Hãy tích chọn tất cả các phương án đúng rồi bấm "Xác nhận gửi đáp án".</span>
+            </div>
+          )}
+
           <h2 className="text-base sm:text-xl font-black text-slate-900 dark:text-white leading-snug">
             {questionText}
           </h2>
@@ -679,29 +703,69 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
 
         {/* Answer Options: Prominent Cards with shapes AND full option text */}
         {!hasAnswered ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            {kahootButtons.map((btn, idx) => {
-              const optionText = questionOptions[idx] !== undefined ? questionOptions[idx] : `Phương án ${btn.label}`;
-              return (
+          <div className="space-y-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              {kahootButtons.map((btn, idx) => {
+                const optionText = questionOptions[idx] !== undefined ? questionOptions[idx] : `Phương án ${btn.label}`;
+                const isSelected = isMultipleSelect && selectedMultiple.includes(idx);
+
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      if (isMultipleSelect) {
+                        togglePlayerMultipleOption(idx);
+                      } else {
+                        handleSelectOption(idx);
+                      }
+                    }}
+                    className={`rounded-2xl sm:rounded-3xl ${btn.color} text-white p-4 sm:p-5 flex items-center gap-3.5 sm:gap-4 shadow-lg transition-all duration-150 cursor-pointer text-left group ${
+                      isSelected ? 'ring-4 ring-purple-400 dark:ring-purple-300 ring-offset-2 scale-[1.02] shadow-2xl' : ''
+                    }`}
+                  >
+                    <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-black/20 backdrop-blur-xs flex items-center justify-center shrink-0 shadow-inner">
+                      <span className="text-2xl sm:text-3xl font-black drop-shadow-xs">{btn.shape}</span>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <span className="block text-[10px] font-black uppercase tracking-wider opacity-85 mb-0.5">
+                        PHƯƠNG ÁN {btn.label}
+                      </span>
+                      <span className="text-sm sm:text-base font-bold leading-snug line-clamp-3 break-words">
+                        {optionText}
+                      </span>
+                    </div>
+
+                    {isMultipleSelect && (
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 border-2 transition-colors ${
+                        isSelected ? 'bg-white text-indigo-900 border-white' : 'border-white/50 bg-black/20'
+                      }`}>
+                        {isSelected && <CheckSquare className="w-4 h-4 text-indigo-600" />}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {isMultipleSelect && (
+              <div className="pt-2">
                 <button
-                  key={idx}
-                  onClick={() => handleSelectOption(idx)}
-                  className={`rounded-2xl sm:rounded-3xl ${btn.color} text-white p-4 sm:p-5 flex items-center gap-3.5 sm:gap-4 shadow-lg transition-all duration-150 cursor-pointer text-left group`}
+                  type="button"
+                  onClick={() => handleSubmitPlayerAnswer(selectedMultiple)}
+                  disabled={selectedMultiple.length === 0}
+                  className="w-full py-4 px-6 rounded-2xl bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-base sm:text-lg flex items-center justify-center gap-2 shadow-xl shadow-purple-600/30 transition-all cursor-pointer"
                 >
-                  <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-black/20 backdrop-blur-xs flex items-center justify-center shrink-0 shadow-inner">
-                    <span className="text-2xl sm:text-3xl font-black drop-shadow-xs">{btn.shape}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="block text-[10px] font-black uppercase tracking-wider opacity-85 mb-0.5">
-                      PHƯƠNG ÁN {btn.label}
-                    </span>
-                    <span className="text-sm sm:text-base font-bold leading-snug line-clamp-3 break-words">
-                      {optionText}
-                    </span>
-                  </div>
+                  <CheckCircle2 className="w-6 h-6" />
+                  <span>
+                    {selectedMultiple.length > 0
+                      ? `Xác nhận gửi đáp án (Đã chọn ${selectedMultiple.length} phương án)`
+                      : 'Vui lòng tích chọn các đáp án bạn cho là đúng'}
+                  </span>
                 </button>
-              );
-            })}
+              </div>
+            )}
           </div>
         ) : (
           <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl text-center space-y-5 animate-in zoom-in-95">
@@ -710,7 +774,9 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs">
                 <span className="text-slate-400 block mb-1">Phương án bạn đã chọn:</span>
                 <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">
-                  {kahootButtons[selectedAnswer]?.label}. {questionOptions[selectedAnswer]}
+                  {Array.isArray(selectedAnswer)
+                    ? selectedAnswer.map((i: number) => `${kahootButtons[i]?.label}. ${questionOptions[i]}`).join('  |  ')
+                    : `${kahootButtons[selectedAnswer]?.label}. ${questionOptions[selectedAnswer]}`}
                 </span>
               </div>
             )}

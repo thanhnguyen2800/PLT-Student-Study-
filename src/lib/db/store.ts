@@ -668,13 +668,16 @@ class DataStore {
       return session;
     }
 
-    // Check correctness
+    // Check correctness (hỗ trợ trắc nghiệm 1 đáp án và chọn nhiều đáp án đúng)
     let isCorrect = false;
     if (Array.isArray(currentQ.correctAnswer)) {
-      if (Array.isArray(answerIndex)) {
-        isCorrect = currentQ.correctAnswer.length === answerIndex.length &&
-          currentQ.correctAnswer.every(val => answerIndex.includes(val));
-      }
+      const correctArr = currentQ.correctAnswer.map(Number);
+      const userArr = Array.isArray(answerIndex) ? answerIndex.map(Number) : [Number(answerIndex)];
+      isCorrect = correctArr.length === userArr.length &&
+        correctArr.every(val => userArr.includes(val)) &&
+        userArr.every(val => correctArr.includes(val));
+    } else if (Array.isArray(answerIndex)) {
+      isCorrect = answerIndex.length === 1 && Number(answerIndex[0]) === Number(currentQ.correctAnswer);
     } else {
       isCorrect = Number(currentQ.correctAnswer) === Number(answerIndex);
     }
@@ -974,10 +977,13 @@ class DataStore {
 
     let isCorrect = false;
     if (Array.isArray(currentQ.correctAnswer)) {
-      if (Array.isArray(answer)) {
-        isCorrect = currentQ.correctAnswer.length === answer.length &&
-          currentQ.correctAnswer.every(val => answer.includes(val));
-      }
+      const correctArr = currentQ.correctAnswer.map(Number);
+      const userArr = Array.isArray(answer) ? answer.map(Number) : [Number(answer)];
+      isCorrect = correctArr.length === userArr.length &&
+        correctArr.every(val => userArr.includes(val)) &&
+        userArr.every(val => correctArr.includes(val));
+    } else if (Array.isArray(answer)) {
+      isCorrect = answer.length === 1 && Number(answer[0]) === Number(currentQ.correctAnswer);
     } else {
       isCorrect = Number(currentQ.correctAnswer) === Number(answer);
     }
