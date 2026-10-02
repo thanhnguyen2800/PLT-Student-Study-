@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { Quiz, Question, QuestionType, QuizDifficulty } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { ImageGeneratorModal } from '../components/ai/ImageGeneratorModal';
 import { speakText } from '../utils/tts';
 
 interface QuizEditorProps {
@@ -39,8 +38,6 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
   const [questions, setQuestions] = useState<Question[]>([]);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
 
-  const [showImageModal, setShowImageModal] = useState(false);
-  const [imageModalTarget, setImageModalTarget] = useState<'cover' | 'question'>('cover');
   const [showJsonModal, setShowJsonModal] = useState(false);
   const [jsonInput, setJsonInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -323,7 +320,7 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
             />
           </div>
 
-          {/* Cover Image & AI Generator Affordance */}
+          {/* Cover Image */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Ảnh bìa bài Quiz
@@ -584,20 +581,6 @@ export const QuizEditorPage: React.FC<QuizEditorProps> = ({ quizId, onBack, onSa
         </div>
 
       </div>
-
-      {/* AI Image Generator Modal with 1K, 2K, 4K affordance */}
-      <ImageGeneratorModal
-        isOpen={showImageModal}
-        onClose={() => setShowImageModal(false)}
-        initialPrompt={imageModalTarget === 'cover' ? title : activeQ?.question}
-        onSelectImage={(url) => {
-          if (imageModalTarget === 'cover') {
-            setCoverImageUrl(url);
-          } else {
-            updateActiveQuestion('imageUrl', url);
-          }
-        }}
-      />
 
       {/* JSON Import / Export Modal */}
       {showJsonModal && (

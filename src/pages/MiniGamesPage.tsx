@@ -19,7 +19,12 @@ import {
   BookOpen,
   Info,
   ShieldAlert,
-  ChevronDown
+  ChevronDown,
+  XCircle,
+  Check,
+  ArrowRight,
+  HelpCircle,
+  Lightbulb
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { speakText } from '../utils/tts';
@@ -39,6 +44,7 @@ export interface MemoryPair {
   id: string;
   term: string;
   desc: string;
+  note?: string;
 }
 
 interface MiniGamesPageProps {
@@ -185,7 +191,7 @@ export const MiniGamesPage: React.FC<MiniGamesPageProps> = ({ onNavigate }) => {
       q: q.question,
       opts,
       a: ansIdx,
-      explanation: q.explanation,
+      explanation: q.explanation || `Phương án chính xác là "${opts[ansIdx]}".`,
     };
   });
 
@@ -197,6 +203,7 @@ export const MiniGamesPage: React.FC<MiniGamesPageProps> = ({ onNavigate }) => {
       id: `pair_${idx}`,
       term: `Q${idx + 1}: ${shortQ}`,
       desc: shortA,
+      note: q.explanation || `Thuật ngữ "${shortQ}" tương ứng với đáp án "${correctOpt}".`,
     };
   });
 
@@ -415,11 +422,36 @@ export const MiniGamesPage: React.FC<MiniGamesPageProps> = ({ onNavigate }) => {
 // 1. GAME: ĐUA XE TRI THỨC (Racing Trivia)
 // ==========================================
 const RACING_QUESTIONS: GameQuestion[] = [
-  { q: 'Thuật toán nào sắp xếp theo cơ chế chia để trị (Divide and Conquer)?', opts: ['Merge Sort', 'Bubble Sort', 'Insertion Sort', 'Selection Sort'], a: 0 },
-  { q: 'Giao thức nào cung cấp kết nối mạng an toàn được mã hóa?', opts: ['HTTP', 'FTP', 'HTTPS', 'Telnet'], a: 2 },
-  { q: 'Trong TypeScript, từ khóa nào định nghĩa một kiểu dữ liệu mới?', opts: ['type & interface', 'let & var', 'import & export', 'def & struct'], a: 0 },
-  { q: 'Bộ nhớ Cache của CPU thường dùng loại RAM nào?', opts: ['SRAM', 'DRAM', 'VRAM', 'Flash RAM'], a: 0 },
-  { q: 'Cấu trúc dữ liệu nào hoạt động theo nguyên tắc LIFO (Last In First Out)?', opts: ['Queue', 'Stack', 'Array', 'Linked List'], a: 1 },
+  { 
+    q: 'Thuật toán nào sắp xếp theo cơ chế chia để trị (Divide and Conquer)?', 
+    opts: ['Merge Sort', 'Bubble Sort', 'Insertion Sort', 'Selection Sort'], 
+    a: 0,
+    explanation: 'Merge Sort (Sắp xếp trộn) chia đôi danh sách dữ liệu cho đến khi thành các mảng đơn lẻ, sau đó sắp xếp và gộp (Merge) lại theo thứ tự với hiệu năng tối ưu O(n log n).' 
+  },
+  { 
+    q: 'Giao thức nào cung cấp kết nối mạng an toàn được mã hóa?', 
+    opts: ['HTTP', 'FTP', 'HTTPS', 'Telnet'], 
+    a: 2,
+    explanation: 'HTTPS (Hypertext Transfer Protocol Secure) sử dụng giao thức bảo mật SSL/TLS để mã hóa toàn bộ dữ liệu truyền giữa client và server.' 
+  },
+  { 
+    q: 'Trong TypeScript, từ khóa nào định nghĩa một kiểu dữ liệu mới?', 
+    opts: ['type & interface', 'let & var', 'import & export', 'def & struct'], 
+    a: 0,
+    explanation: 'Trong TypeScript, "type" (Type Alias) và "interface" là hai cơ chế chính để khai báo kiểu dữ liệu tùy chỉnh, cấu trúc object và hàm.' 
+  },
+  { 
+    q: 'Bộ nhớ Cache của CPU thường dùng loại RAM nào?', 
+    opts: ['SRAM', 'DRAM', 'VRAM', 'Flash RAM'], 
+    a: 0,
+    explanation: 'SRAM (Static RAM) có tốc độ truy xuất cực nhanh và không yêu cầu chu kỳ làm tươi (refresh) liên tục như DRAM, nên thường dùng làm bộ nhớ đệm Cache CPU L1/L2/L3.' 
+  },
+  { 
+    q: 'Cấu trúc dữ liệu nào hoạt động theo nguyên tắc LIFO (Last In First Out)?', 
+    opts: ['Queue', 'Stack', 'Array', 'Linked List'], 
+    a: 1,
+    explanation: 'Stack (Ngăn xếp) hoạt động theo nguyên tắc LIFO (Vào sau - Ra trước): phần tử được đẩy vào cuối cùng (push) sẽ là phần tử được lấy ra đầu tiên (pop).' 
+  },
 ];
 
 function RacingTriviaGame({ questions, packTitle }: { questions: GameQuestion[]; packTitle: string }) {
@@ -428,6 +460,12 @@ function RacingTriviaGame({ questions, packTitle }: { questions: GameQuestion[];
   const [aiPos, setAiPos] = useState(10);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isFinished, setIsFinished] = useState(false);
+  const [wrongNote, setWrongNote] = useState<{
+    userChoice: number;
+    correctChoice: number;
+    correctText: string;
+    explanation?: string;
+  } | null>(null);
 
   // Reset state whenever question pack changes
   useEffect(() => {
@@ -435,12 +473,13 @@ function RacingTriviaGame({ questions, packTitle }: { questions: GameQuestion[];
     setPlayerPos(10);
     setAiPos(10);
     setFeedback(null);
+    setWrongNote(null);
     setIsFinished(false);
   }, [questions]);
 
   useEffect(() => {
-    // AI slowly moves forward
-    if (isFinished) return;
+    // AI slowly moves forward (pauses while user reads wrong note)
+    if (isFinished || wrongNote) return;
     const interval = setInterval(() => {
       setAiPos(prev => {
         const next = prev + Math.floor(Math.random() * 4 + 2);
@@ -452,10 +491,10 @@ function RacingTriviaGame({ questions, packTitle }: { questions: GameQuestion[];
       });
     }, 2000);
     return () => clearInterval(interval);
-  }, [isFinished]);
+  }, [isFinished, wrongNote]);
 
   const handleAnswer = (choiceIdx: number) => {
-    if (isFinished || questions.length === 0) return;
+    if (isFinished || wrongNote || questions.length === 0) return;
     const curr = questions[qIdx % questions.length];
     if (choiceIdx === curr.a) {
       setFeedback('✅ Tuyệt vời! Tăng tốc bứt phá +25%');
@@ -465,14 +504,25 @@ function RacingTriviaGame({ questions, packTitle }: { questions: GameQuestion[];
       if (nextPos >= 100) {
         setIsFinished(true);
       }
+      setTimeout(() => {
+        setFeedback(null);
+        setQIdx(prev => (prev + 1) % questions.length);
+      }, 1200);
     } else {
       setFeedback('❌ Chưa chính xác! Xe giảm tốc độ.');
+      setWrongNote({
+        userChoice: choiceIdx,
+        correctChoice: curr.a,
+        correctText: curr.opts[curr.a],
+        explanation: curr.explanation || 'Hãy ghi nhớ đáp án này cho các chặng đua tiếp theo!',
+      });
     }
+  };
 
-    setTimeout(() => {
-      setFeedback(null);
-      setQIdx(prev => (prev + 1) % questions.length);
-    }, 1200);
+  const handleContinueNext = () => {
+    setWrongNote(null);
+    setFeedback(null);
+    setQIdx(prev => (prev + 1) % questions.length);
   };
 
   const restart = () => {
@@ -480,6 +530,7 @@ function RacingTriviaGame({ questions, packTitle }: { questions: GameQuestion[];
     setPlayerPos(10);
     setAiPos(10);
     setFeedback(null);
+    setWrongNote(null);
     setIsFinished(false);
   };
 
@@ -564,22 +615,73 @@ function RacingTriviaGame({ questions, packTitle }: { questions: GameQuestion[];
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {curr.opts.map((opt, i) => (
-              <button
-                key={i}
-                onClick={() => handleAnswer(i)}
-                className="p-3 text-left rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-amber-500 font-medium text-xs text-slate-800 dark:text-slate-100 transition-colors shadow-xs cursor-pointer active:scale-98"
-              >
-                <span className="font-bold mr-2 text-indigo-600">{String.fromCharCode(65 + i)}.</span>
-                {opt}
-              </button>
-            ))}
+            {curr.opts.map((opt, i) => {
+              const isWrongChosen = wrongNote?.userChoice === i;
+              const isCorrectOpt = wrongNote?.correctChoice === i;
+              
+              let btnClass = "p-3 text-left rounded-xl border font-medium text-xs transition-colors shadow-xs flex items-center justify-between ";
+              if (wrongNote) {
+                if (isCorrectOpt) {
+                  btnClass += "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 font-bold";
+                } else if (isWrongChosen) {
+                  btnClass += "border-rose-500 bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 font-bold";
+                } else {
+                  btnClass += "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-400 opacity-60";
+                }
+              } else {
+                btnClass += "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-amber-500 text-slate-800 dark:text-slate-100 cursor-pointer active:scale-98";
+              }
+
+              return (
+                <button
+                  key={i}
+                  disabled={!!wrongNote}
+                  onClick={() => handleAnswer(i)}
+                  className={btnClass}
+                >
+                  <div className="flex items-center">
+                    <span className={`font-bold mr-2 ${isCorrectOpt ? 'text-emerald-600' : isWrongChosen ? 'text-rose-600' : 'text-indigo-600'}`}>
+                      {String.fromCharCode(65 + i)}.
+                    </span>
+                    <span>{opt}</span>
+                  </div>
+                  {isCorrectOpt && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+                  {isWrongChosen && <XCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+                </button>
+              );
+            })}
           </div>
 
-          {feedback && (
+          {feedback && !wrongNote && (
             <p className="text-xs font-bold text-center text-amber-600 dark:text-amber-400 animate-pulse">
               {feedback}
             </p>
+          )}
+
+          {/* NOTE CHO CÂU TRẢ LỜI SAI */}
+          {wrongNote && (
+            <div className="p-4 rounded-2xl bg-amber-50/90 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700/80 text-left space-y-2.5 animate-in fade-in">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>Bạn đã trả lời chưa chính xác! Note ghi nhớ đáp án đúng:</span>
+              </div>
+              <div className="text-xs text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                <strong className="text-emerald-600 dark:text-emerald-400">Đáp án chính xác:</strong>
+                <span className="font-bold underline decoration-emerald-500">{wrongNote.correctText}</span>
+              </div>
+              {wrongNote.explanation && (
+                <div className="text-[11px] text-slate-700 dark:text-slate-300 bg-white/80 dark:bg-slate-900/80 p-3 rounded-xl border border-amber-200 dark:border-amber-800/80 leading-relaxed shadow-xs">
+                  💡 <strong>Ghi chú & Lời giải:</strong> {wrongNote.explanation}
+                </div>
+              )}
+              <button
+                onClick={handleContinueNext}
+                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-xs cursor-pointer transition-transform active:scale-98 flex items-center justify-center gap-1.5"
+              >
+                <span>Đã ghi nhớ & Tiếp tục chặng đua</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
         </div>
       ) : (
@@ -604,39 +706,77 @@ function RacingTriviaGame({ questions, packTitle }: { questions: GameQuestion[];
 // 2. GAME: SÚT PHẠT THỦ MÔN (Penalty Shootout)
 // ==========================================
 const PENALTY_QUESTIONS: GameQuestion[] = [
-  { q: 'Đơn vị đo lường thông tin cơ bản nhỏ nhất là gì?', opts: ['Byte', 'Bit', 'Kilobyte', 'Nibble'], a: 1 },
-  { q: 'Ngôn ngữ nào chạy được tự nhiên trong trình duyệt web?', opts: ['JavaScript', 'Python', 'C++', 'Java'], a: 0 },
-  { q: 'Số nhị phân 1010 tương ứng với số thập phân nào?', opts: ['8', '10', '12', '14'], a: 1 },
-  { q: 'HTML là viết tắt của gì?', opts: ['HyperText Markup Language', 'HighText Machine Language', 'Hyper Tool Multi Language', 'Home Tech Modern Link'], a: 0 },
+  { 
+    q: 'Đơn vị đo lường thông tin cơ bản nhỏ nhất là gì?', 
+    opts: ['Byte', 'Bit', 'Kilobyte', 'Nibble'], 
+    a: 1,
+    explanation: 'Bit (viết tắt của Binary Digit - Chữ số nhị phân) là đơn vị đo thông tin cơ bản và nhỏ nhất trong khoa học máy tính, chỉ nhận 1 trong 2 giá trị: 0 hoặc 1.' 
+  },
+  { 
+    q: 'Ngôn ngữ nào chạy được tự nhiên trong trình duyệt web?', 
+    opts: ['JavaScript', 'Python', 'C++', 'Java'], 
+    a: 0,
+    explanation: 'JavaScript là ngôn ngữ kịch bản tiêu chuẩn duy nhất được tất cả các trình duyệt web hiện đại hỗ trợ thực thi trực tiếp trên máy client.' 
+  },
+  { 
+    q: 'Số nhị phân 1010 tương ứng với số thập phân nào?', 
+    opts: ['8', '10', '12', '14'], 
+    a: 1,
+    explanation: 'Chuyển đổi nhị phân 1010 sang thập phân: (1 × 2³) + (0 × 2²) + (1 × 2¹) + (0 × 2⁰) = 8 + 0 + 2 + 0 = 10.' 
+  },
+  { 
+    q: 'HTML là viết tắt của gì?', 
+    opts: ['HyperText Markup Language', 'HighText Machine Language', 'Hyper Tool Multi Language', 'Home Tech Modern Link'], 
+    a: 0,
+    explanation: 'HTML là viết tắt của HyperText Markup Language (Ngôn ngữ đánh dấu siêu văn bản), dùng để xây dựng cấu trúc và định hình nội dung của trang web.' 
+  },
 ];
 
 function PenaltyShootoutGame({ questions, packTitle }: { questions: GameQuestion[]; packTitle: string }) {
   const [qIdx, setQIdx] = useState(0);
   const [score, setScore] = useState(0);
   const [gkStatus, setGkStatus] = useState<'IDLE' | 'GOAL' | 'SAVED'>('IDLE');
+  const [wrongNote, setWrongNote] = useState<{
+    userChoice: number;
+    correctChoice: number;
+    correctText: string;
+    explanation?: string;
+  } | null>(null);
 
   // Reset when question set changes
   useEffect(() => {
     setQIdx(0);
     setScore(0);
     setGkStatus('IDLE');
+    setWrongNote(null);
   }, [questions]);
 
   const handleShoot = (choiceIdx: number) => {
-    if (questions.length === 0) return;
+    if (questions.length === 0 || gkStatus !== 'IDLE' || wrongNote) return;
     const curr = questions[qIdx % questions.length];
     if (choiceIdx === curr.a) {
       setGkStatus('GOAL');
       setScore(s => s + 1);
       confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+      setTimeout(() => {
+        setGkStatus('IDLE');
+        setQIdx(prev => (prev + 1) % questions.length);
+      }, 1800);
     } else {
       setGkStatus('SAVED');
+      setWrongNote({
+        userChoice: choiceIdx,
+        correctChoice: curr.a,
+        correctText: curr.opts[curr.a],
+        explanation: curr.explanation || 'Góc sút này đã bị thủ môn phán đoán trước!',
+      });
     }
+  };
 
-    setTimeout(() => {
-      setGkStatus('IDLE');
-      setQIdx(prev => (prev + 1) % questions.length);
-    }, 1800);
+  const handleContinueNext = () => {
+    setWrongNote(null);
+    setGkStatus('IDLE');
+    setQIdx(prev => (prev + 1) % questions.length);
   };
 
   const curr = questions[qIdx % questions.length] || questions[0];
@@ -695,17 +835,63 @@ function PenaltyShootoutGame({ questions, packTitle }: { questions: GameQuestion
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {curr.opts.map((opt, i) => (
-              <button
-                key={i}
-                disabled={gkStatus !== 'IDLE'}
-                onClick={() => handleShoot(i)}
-                className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-emerald-500 font-bold text-xs text-slate-800 dark:text-slate-100 transition-colors shadow-xs cursor-pointer active:scale-98 disabled:opacity-60"
-              >
-                ⚽ Sút góc: {opt}
-              </button>
-            ))}
+            {curr.opts.map((opt, i) => {
+              const isCorrectOpt = wrongNote?.correctChoice === i;
+              const isWrongChosen = wrongNote?.userChoice === i;
+
+              let btnClass = "p-3 rounded-xl border font-bold text-xs transition-colors shadow-xs flex items-center justify-between ";
+              if (wrongNote) {
+                if (isCorrectOpt) {
+                  btnClass += "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300";
+                } else if (isWrongChosen) {
+                  btnClass += "border-rose-500 bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300";
+                } else {
+                  btnClass += "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-400 opacity-60";
+                }
+              } else {
+                btnClass += "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-emerald-500 text-slate-800 dark:text-slate-100 cursor-pointer active:scale-98 disabled:opacity-60";
+              }
+
+              return (
+                <button
+                  key={i}
+                  disabled={gkStatus !== 'IDLE' || !!wrongNote}
+                  onClick={() => handleShoot(i)}
+                  className={btnClass}
+                >
+                  <span className="text-left">⚽ Sút góc: {opt}</span>
+                  {isCorrectOpt && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+                  {isWrongChosen && <XCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+                </button>
+              );
+            })}
           </div>
+
+          {/* NOTE CHO CÂU SÚT TRƯỢT / SAI */}
+          {wrongNote && (
+            <div className="p-4 rounded-2xl bg-amber-50/90 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700/80 text-left space-y-2.5 animate-in fade-in">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>Cú sút không vào (Thủ môn cản phá)! Note kiến thức:</span>
+              </div>
+              <div className="text-xs text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                <strong className="text-emerald-600 dark:text-emerald-400">Góc sút / Đáp án chính xác:</strong>
+                <span className="font-bold underline decoration-emerald-500">{wrongNote.correctText}</span>
+              </div>
+              {wrongNote.explanation && (
+                <div className="text-[11px] text-slate-700 dark:text-slate-300 bg-white/80 dark:bg-slate-900/80 p-3 rounded-xl border border-amber-200 dark:border-amber-800/80 leading-relaxed shadow-xs">
+                  💡 <strong>Ghi chú & Lời giải:</strong> {wrongNote.explanation}
+                </div>
+              )}
+              <button
+                onClick={handleContinueNext}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-transform active:scale-98 flex items-center justify-center gap-1.5"
+              >
+                <span>Đã ghi nhớ & Sang lượt sút kế tiếp</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -716,16 +902,23 @@ function PenaltyShootoutGame({ questions, packTitle }: { questions: GameQuestion
 // 3. GAME: LẬT THẺ TRÍ NHỚ (Memory Match)
 // ==========================================
 const MEMORY_PAIRS: MemoryPair[] = [
-  { id: '1', term: 'React', desc: 'UI Library' },
-  { id: '2', term: 'TypeScript', desc: 'Type Safety' },
-  { id: '3', term: 'Firestore', desc: 'NoSQL DB' },
-  { id: '4', term: 'Docker', desc: 'Container' },
+  { id: '1', term: 'React', desc: 'UI Library', note: 'React là thư viện JavaScript hàng đầu do Meta phát triển để xây dựng giao diện người dùng dạng component.' },
+  { id: '2', term: 'TypeScript', desc: 'Type Safety', note: 'TypeScript bổ sung hệ thống kiểm tra kiểu tĩnh (Type Safety) vào JavaScript giúp code an toàn và dễ bảo trì.' },
+  { id: '3', term: 'Firestore', desc: 'NoSQL DB', note: 'Cloud Firestore là cơ sở dữ liệu tài liệu linh hoạt (NoSQL Document DB) hỗ trợ đồng bộ dữ liệu thời gian thực.' },
+  { id: '4', term: 'Docker', desc: 'Container', note: 'Docker là nền tảng ảo hóa mức hệ điều hành (Containerization) giúp đóng gói ứng dụng chạy nhất quán ở mọi môi trường.' },
 ];
 
 function MemoryMatchGame({ pairs, packTitle }: { pairs: MemoryPair[]; packTitle: string }) {
   const [cards, setCards] = useState<{ uid: number; pairId: string; text: string; isFlipped: boolean; isMatched: boolean }[]>([]);
   const [flippedCards, setFlippedCards] = useState<number[]>([]);
   const [matchesCount, setMatchesCount] = useState(0);
+  const [mismatchNote, setMismatchNote] = useState<{
+    card1: string;
+    card2: string;
+    pair1Text?: string;
+    pair1Desc?: string;
+  } | null>(null);
+  const [showHandbook, setShowHandbook] = useState(false);
 
   const initGame = () => {
     const list: any[] = [];
@@ -737,6 +930,7 @@ function MemoryMatchGame({ pairs, packTitle }: { pairs: MemoryPair[]; packTitle:
     setCards(list.sort(() => Math.random() - 0.5));
     setFlippedCards([]);
     setMatchesCount(0);
+    setMismatchNote(null);
   };
 
   useEffect(() => {
@@ -757,6 +951,7 @@ function MemoryMatchGame({ pairs, packTitle }: { pairs: MemoryPair[]; packTitle:
       const [firstIdx, secondIdx] = newFlipped;
       if (newCards[firstIdx].pairId === newCards[secondIdx].pairId) {
         // Matched!
+        setMismatchNote(null);
         setTimeout(() => {
           newCards[firstIdx].isMatched = true;
           newCards[secondIdx].isMatched = true;
@@ -765,13 +960,21 @@ function MemoryMatchGame({ pairs, packTitle }: { pairs: MemoryPair[]; packTitle:
           setMatchesCount(m => m + 1);
         }, 500);
       } else {
-        // Mismatch
+        // Mismatch - store note for the failed pair match
+        const p1 = pairs.find(p => p.id === newCards[firstIdx].pairId);
+        setMismatchNote({
+          card1: newCards[firstIdx].text,
+          card2: newCards[secondIdx].text,
+          pair1Text: p1?.term,
+          pair1Desc: p1?.desc,
+        });
+
         setTimeout(() => {
           newCards[firstIdx].isFlipped = false;
           newCards[secondIdx].isFlipped = false;
           setCards([...newCards]);
           setFlippedCards([]);
-        }, 900);
+        }, 1200);
       }
     }
   };
@@ -815,8 +1018,62 @@ function MemoryMatchGame({ pairs, packTitle }: { pairs: MemoryPair[]; packTitle:
         ))}
       </div>
 
+      {/* NOTE CHO CẶP GHÉP SAI */}
+      {mismatchNote && (
+        <div className="p-3.5 max-w-xl mx-auto rounded-2xl bg-amber-50/90 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700/80 text-left space-y-1.5 animate-in fade-in">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>Ghép chưa đúng cặp! Note ghi nhớ:</span>
+          </div>
+          <p className="text-xs text-slate-800 dark:text-slate-200">
+            Thẻ "<strong>{mismatchNote.card1}</strong>" không thuộc cùng cặp với thẻ "<strong>{mismatchNote.card2}</strong>".
+          </p>
+          {mismatchNote.pair1Text && mismatchNote.pair1Desc && (
+            <div className="text-[11px] text-slate-700 dark:text-slate-300 bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800/80">
+              💡 <strong>Cặp đúng của thẻ này:</strong> <span className="font-bold text-indigo-600 dark:text-indigo-400">{mismatchNote.pair1Text}</span> ➜ <span className="font-bold text-emerald-600 dark:text-emerald-400">{mismatchNote.pair1Desc}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SỔ TAY GHI NHỚ TOÀN BỘ CẶP THẺ */}
+      <div className="max-w-xl mx-auto text-left pt-1">
+        <button
+          type="button"
+          onClick={() => setShowHandbook(!showHandbook)}
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+        >
+          <BookOpen className="w-3.5 h-3.5" />
+          <span>{showHandbook ? 'Ẩn sổ tay ghi nhớ' : '💡 Xem sổ tay note các cặp ghép đúng'}</span>
+        </button>
+
+        {showHandbook && (
+          <div className="mt-2.5 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2 animate-in fade-in">
+            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
+              Danh mục các cặp thẻ & Note kiến thức:
+            </span>
+            <div className="space-y-1.5">
+              {pairs.map((p, idx) => (
+                <div key={idx} className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs">
+                  <div className="flex items-center justify-between font-semibold">
+                    <span className="text-indigo-600 dark:text-indigo-400">{p.term}</span>
+                    <span className="text-slate-400">➜</span>
+                    <span className="text-emerald-600 dark:text-emerald-400">{p.desc}</span>
+                  </div>
+                  {p.note && (
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 pt-1 border-t border-slate-100 dark:border-slate-800">
+                      💡 {p.note}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       {matchesCount === pairs.length && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-bold animate-in zoom-in">
+        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-bold animate-in zoom-in max-w-xl mx-auto">
           🎉 Chúc mừng bạn đã hoàn thành ghép đúng toàn bộ các cặp thẻ!
         </div>
       )}
@@ -828,11 +1085,36 @@ function MemoryMatchGame({ pairs, packTitle }: { pairs: MemoryPair[]; packTitle:
 // 4. GAME: SINH TỒN TRI THỨC (Survival Rush)
 // ==========================================
 const SURVIVAL_QUESTIONS: GameQuestion[] = [
-  { q: 'Trong mô hình OSI, tầng nào chịu trách nhiệm truyền dữ liệu vật lý?', opts: ['Physical Layer', 'Transport Layer', 'Network Layer', 'Session Layer'], a: 0 },
-  { q: 'Cấu trúc giải thuật Dijkstra dùng để tìm gì?', opts: ['Đường đi ngắn nhất', 'Cây khung nhỏ nhất', 'Sắp xếp mảng', 'Mã hóa dữ liệu'], a: 0 },
-  { q: 'Độ phức tạp thời gian trung bình của Quick Sort là gì?', opts: ['O(n log n)', 'O(n^2)', 'O(n)', 'O(1)'], a: 0 },
-  { q: 'Giao thức nào phân giải tên miền sang địa chỉ IP?', opts: ['DNS', 'DHCP', 'ARP', 'SNMP'], a: 0 },
-  { q: 'Trong SQL, lệnh nào xóa toàn bộ bảng dữ liệu không thể rollback?', opts: ['DROP TABLE', 'DELETE', 'REMOVE', 'CLEAR'], a: 0 },
+  { 
+    q: 'Trong mô hình OSI, tầng nào chịu trách nhiệm truyền dữ liệu vật lý?', 
+    opts: ['Physical Layer', 'Transport Layer', 'Network Layer', 'Session Layer'], 
+    a: 0,
+    explanation: 'Tầng Vật lý (Physical Layer - Tầng 1) chịu trách nhiệm truyền tải dòng bit nhị phân thô qua các phương tiện truyền dẫn vật lý (dây cáp mạng, cáp quang, sóng vô tuyến).' 
+  },
+  { 
+    q: 'Cấu trúc giải thuật Dijkstra dùng để tìm gì?', 
+    opts: ['Đường đi ngắn nhất', 'Cây khung nhỏ nhất', 'Sắp xếp mảng', 'Mã hóa dữ liệu'], 
+    a: 0,
+    explanation: 'Thuật toán Dijkstra được thiết kế để giải bài toán tìm đường đi ngắn nhất từ một đỉnh nguồn đến tất cả các đỉnh còn lại trong đồ thị có trọng số cạnh không âm.' 
+  },
+  { 
+    q: 'Độ phức tạp thời gian trung bình của Quick Sort là gì?', 
+    opts: ['O(n log n)', 'O(n^2)', 'O(n)', 'O(1)'], 
+    a: 0,
+    explanation: 'Quick Sort có độ phức tạp thời gian trung bình là O(n log n), hiệu quả vượt trội trong thực tế nhờ cơ chế phân hoạch mảng theo phần tử chốt (pivot).' 
+  },
+  { 
+    q: 'Giao thức nào phân giải tên miền sang địa chỉ IP?', 
+    opts: ['DNS', 'DHCP', 'ARP', 'SNMP'], 
+    a: 0,
+    explanation: 'DNS (Domain Name System - Hệ thống phân giải tên miền) đóng vai trò như danh bạ Internet, chuyển đổi tên miền thân thiện (ví dụ: google.com) thành địa chỉ IP số học (ví dụ: 142.250.190.46).' 
+  },
+  { 
+    q: 'Trong SQL, lệnh nào xóa toàn bộ bảng dữ liệu không thể rollback?', 
+    opts: ['DROP TABLE', 'DELETE', 'REMOVE', 'CLEAR'], 
+    a: 0,
+    explanation: 'Lệnh DROP TABLE (nhóm DDL) xóa hoàn toàn định nghĩa cấu trúc bảng cùng toàn bộ dữ liệu, tự động commit và không thể Rollback trong hầu hết các hệ quản trị CSDL chuẩn.' 
+  },
 ];
 
 function SurvivalQuizGame({ questions, packTitle }: { questions: GameQuestion[]; packTitle: string }) {
@@ -840,27 +1122,62 @@ function SurvivalQuizGame({ questions, packTitle }: { questions: GameQuestion[];
   const [qIdx, setQIdx] = useState(0);
   const [score, setScore] = useState(0);
   const [isDead, setIsDead] = useState(false);
+  const [wrongNote, setWrongNote] = useState<{
+    userChoice: number;
+    correctChoice: number;
+    correctText: string;
+    explanation?: string;
+    remainingLives: number;
+  } | null>(null);
+  const [lastDeadQuestion, setLastDeadQuestion] = useState<{
+    q: string;
+    userOpt: string;
+    correctOpt: string;
+    explanation?: string;
+  } | null>(null);
 
   useEffect(() => {
     setLives(3);
     setScore(0);
     setQIdx(0);
     setIsDead(false);
+    setWrongNote(null);
+    setLastDeadQuestion(null);
   }, [questions]);
 
   const handleAnswer = (choiceIdx: number) => {
-    if (isDead || questions.length === 0) return;
+    if (isDead || wrongNote || questions.length === 0) return;
     const curr = questions[qIdx % questions.length];
     if (choiceIdx === curr.a) {
       setScore(s => s + 100);
       confetti({ particleCount: 20, spread: 50, origin: { y: 0.7 } });
+      setWrongNote(null);
+      setQIdx(prev => (prev + 1) % questions.length);
     } else {
       const nextLives = lives - 1;
       setLives(nextLives);
       if (nextLives <= 0) {
         setIsDead(true);
+        setLastDeadQuestion({
+          q: curr.q,
+          userOpt: curr.opts[choiceIdx],
+          correctOpt: curr.opts[curr.a],
+          explanation: curr.explanation || 'Hãy lưu ý câu hỏi này để bảo toàn mạng sống tốt hơn ở lượt tiếp theo!',
+        });
+      } else {
+        setWrongNote({
+          userChoice: choiceIdx,
+          correctChoice: curr.a,
+          correctText: curr.opts[curr.a],
+          explanation: curr.explanation || 'Hãy ghi nhớ đáp án này để bảo toàn các mạng sống còn lại!',
+          remainingLives: nextLives,
+        });
       }
     }
+  };
+
+  const handleContinueNext = () => {
+    setWrongNote(null);
     setQIdx(prev => (prev + 1) % questions.length);
   };
 
@@ -869,6 +1186,8 @@ function SurvivalQuizGame({ questions, packTitle }: { questions: GameQuestion[];
     setScore(0);
     setQIdx(0);
     setIsDead(false);
+    setWrongNote(null);
+    setLastDeadQuestion(null);
   };
 
   const curr = questions[qIdx % questions.length] || questions[0];
@@ -909,25 +1228,104 @@ function SurvivalQuizGame({ questions, packTitle }: { questions: GameQuestion[];
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {curr.opts.map((opt, i) => (
-              <button
-                key={i}
-                onClick={() => handleAnswer(i)}
-                className="p-3 text-left rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-rose-500 font-medium text-xs text-slate-800 dark:text-slate-100 transition-colors shadow-xs cursor-pointer active:scale-98"
-              >
-                {opt}
-              </button>
-            ))}
+            {curr.opts.map((opt, i) => {
+              const isCorrectOpt = wrongNote?.correctChoice === i;
+              const isWrongChosen = wrongNote?.userChoice === i;
+
+              let btnClass = "p-3 text-left rounded-xl border font-medium text-xs transition-colors shadow-xs flex items-center justify-between ";
+              if (wrongNote) {
+                if (isCorrectOpt) {
+                  btnClass += "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 font-bold";
+                } else if (isWrongChosen) {
+                  btnClass += "border-rose-500 bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 font-bold";
+                } else {
+                  btnClass += "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-400 opacity-60";
+                }
+              } else {
+                btnClass += "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-rose-500 text-slate-800 dark:text-slate-100 cursor-pointer active:scale-98";
+              }
+
+              return (
+                <button
+                  key={i}
+                  disabled={!!wrongNote}
+                  onClick={() => handleAnswer(i)}
+                  className={btnClass}
+                >
+                  <div className="flex items-center">
+                    <span className={`font-bold mr-2 ${isCorrectOpt ? 'text-emerald-600' : isWrongChosen ? 'text-rose-600' : 'text-slate-400'}`}>
+                      {String.fromCharCode(65 + i)}.
+                    </span>
+                    <span>{opt}</span>
+                  </div>
+                  {isCorrectOpt && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+                  {isWrongChosen && <XCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+                </button>
+              );
+            })}
           </div>
+
+          {/* NOTE CHO CÂU TRẢ LỜI SAI (-1 MẠNG) */}
+          {wrongNote && (
+            <div className="p-4 rounded-2xl bg-amber-50/90 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700/80 text-left space-y-2.5 animate-in fade-in">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>Trả lời chưa chính xác (-1 Mạng)! Note ghi nhớ đáp án:</span>
+              </div>
+              <div className="text-xs text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                <strong className="text-emerald-600 dark:text-emerald-400">Đáp án chính xác:</strong>
+                <span className="font-bold underline decoration-emerald-500">{wrongNote.correctText}</span>
+              </div>
+              {wrongNote.explanation && (
+                <div className="text-[11px] text-slate-700 dark:text-slate-300 bg-white/80 dark:bg-slate-900/80 p-3 rounded-xl border border-amber-200 dark:border-amber-800/80 leading-relaxed shadow-xs">
+                  💡 <strong>Ghi chú & Lời giải:</strong> {wrongNote.explanation}
+                </div>
+              )}
+              <button
+                onClick={handleContinueNext}
+                className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs cursor-pointer transition-transform active:scale-98 flex items-center justify-center gap-1.5"
+              >
+                <span>Đã ghi nhớ & Tiếp tục sinh tồn ({wrongNote.remainingLives} mạng còn lại)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       ) : (
-        <div className="py-6 space-y-3">
+        <div className="py-6 space-y-4">
           <div className="text-4xl">💀</div>
-          <h4 className="text-xl font-black text-rose-600">HẾT MẠNG SINH TỒN!</h4>
-          <p className="text-xs text-slate-400">Bạn đã sống sót đạt được {score} điểm</p>
+          <div>
+            <h4 className="text-xl font-black text-rose-600">HẾT MẠNG SINH TỒN!</h4>
+            <p className="text-xs text-slate-400 mt-1">Bạn đã sống sót đạt được {score} điểm</p>
+          </div>
+
+          {/* NOTE CỦA CÂU KHIẾN HẾT MẠNG CUỐI CÙNG */}
+          {lastDeadQuestion && (
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-left space-y-2 max-w-md mx-auto">
+              <span className="text-[10px] font-bold text-rose-500 uppercase flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" />
+                Câu hỏi khiến bạn mất mạng cuối cùng:
+              </span>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{lastDeadQuestion.q}</p>
+              <div className="space-y-1 text-xs">
+                <p className="text-rose-600 dark:text-rose-400">
+                  <strong>Bạn đã chọn:</strong> {lastDeadQuestion.userOpt} ❌
+                </p>
+                <p className="text-emerald-600 dark:text-emerald-400">
+                  <strong>Đáp án đúng:</strong> {lastDeadQuestion.correctOpt} ✓
+                </p>
+              </div>
+              {lastDeadQuestion.explanation && (
+                <div className="text-[11px] text-slate-700 dark:text-slate-300 bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800/80 leading-relaxed">
+                  💡 <strong>Ghi chú & Lời giải:</strong> {lastDeadQuestion.explanation}
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={restart}
-            className="px-6 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md cursor-pointer transition-transform active:scale-95"
+            className="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md cursor-pointer transition-transform active:scale-95"
           >
             Chơi lại lượt mới
           </button>
@@ -941,11 +1339,36 @@ function SurvivalQuizGame({ questions, packTitle }: { questions: GameQuestion[];
 // 5. GAME: CHỚP NHOÁNG 5 GIÂY (Blitz Speed)
 // ==========================================
 const BLITZ_QUESTIONS: GameQuestion[] = [
-  { q: 'React hook nào dùng để quản lý state?', opts: ['useState', 'useCSS', 'useDOM'], a: 0 },
-  { q: 'TypeScript là superset của ngôn ngữ nào?', opts: ['JavaScript', 'Python', 'Go'], a: 0 },
-  { q: 'Thẻ HTML nào hiển thị hình ảnh?', opts: ['<img>', '<pic>', '<image>'], a: 0 },
-  { q: 'Cổng mặc định của dịch vụ web HTTP là?', opts: ['80', '443', '21'], a: 0 },
-  { q: 'Bộ nhớ nào mất dữ liệu khi mất nguồn điện?', opts: ['RAM', 'SSD', 'ROM'], a: 0 },
+  { 
+    q: 'React hook nào dùng để quản lý state?', 
+    opts: ['useState', 'useCSS', 'useDOM'], 
+    a: 0,
+    explanation: 'useState là React Hook căn bản nhất cho phép bạn khai báo và quản lý biến trạng thái (state) cục bộ trong các Functional Component.' 
+  },
+  { 
+    q: 'TypeScript là superset của ngôn ngữ nào?', 
+    opts: ['JavaScript', 'Python', 'Go'], 
+    a: 0,
+    explanation: 'TypeScript là siêu tập (superset) chứa toàn bộ cú pháp của JavaScript và bổ sung thêm hệ thống định kiểu tĩnh cùng các tính năng hiện đại.' 
+  },
+  { 
+    q: 'Thẻ HTML nào hiển thị hình ảnh?', 
+    opts: ['<img>', '<pic>', '<image>'], 
+    a: 0,
+    explanation: 'Thẻ <img> (Image element) là thẻ đơn chuẩn trong HTML dùng để nhúng hình ảnh vào văn bản thông qua thuộc tính src.' 
+  },
+  { 
+    q: 'Cổng mặc định của dịch vụ web HTTP là?', 
+    opts: ['80', '443', '21'], 
+    a: 0,
+    explanation: 'Cổng 80 là cổng mặc định theo quy chuẩn IANA cho giao thức HTTP không mã hóa (HTTPS dùng cổng 443; FTP dùng cổng 21).' 
+  },
+  { 
+    q: 'Bộ nhớ nào mất dữ liệu khi mất nguồn điện?', 
+    opts: ['RAM', 'SSD', 'ROM'], 
+    a: 0,
+    explanation: 'RAM (Random Access Memory) là bộ nhớ khả biến (Volatile Memory), cần duy trì dòng điện để lưu trữ thông tin và sẽ mất sạch dữ liệu khi tắt nguồn.' 
+  },
 ];
 
 function BlitzSpeedGame({ questions, packTitle }: { questions: GameQuestion[]; packTitle: string }) {
@@ -953,12 +1376,20 @@ function BlitzSpeedGame({ questions, packTitle }: { questions: GameQuestion[]; p
   const [timeLeft, setTimeLeft] = useState(5);
   const [score, setScore] = useState(0);
   const [isGameOver, setIsGameOver] = useState(false);
+  const [failedNote, setFailedNote] = useState<{
+    q: string;
+    userOpt?: string;
+    correctOpt: string;
+    explanation?: string;
+    reason: 'WRONG' | 'TIMEOUT';
+  } | null>(null);
 
   useEffect(() => {
     setQIdx(0);
     setTimeLeft(5);
     setScore(0);
     setIsGameOver(false);
+    setFailedNote(null);
   }, [questions]);
 
   useEffect(() => {
@@ -967,13 +1398,22 @@ function BlitzSpeedGame({ questions, packTitle }: { questions: GameQuestion[]; p
       setTimeLeft(t => {
         if (t <= 1) {
           setIsGameOver(true);
+          const currQ = questions[qIdx % questions.length] || questions[0];
+          if (currQ) {
+            setFailedNote({
+              q: currQ.q,
+              correctOpt: currQ.opts[currQ.a],
+              explanation: currQ.explanation || 'Thời gian 5 giây mỗi câu đã trôi qua!',
+              reason: 'TIMEOUT',
+            });
+          }
           return 0;
         }
         return t - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [qIdx, isGameOver]);
+  }, [qIdx, isGameOver, questions]);
 
   const handleAnswer = (choiceIdx: number) => {
     if (isGameOver || questions.length === 0) return;
@@ -984,6 +1424,13 @@ function BlitzSpeedGame({ questions, packTitle }: { questions: GameQuestion[]; p
       setQIdx(prev => (prev + 1) % questions.length);
     } else {
       setIsGameOver(true);
+      setFailedNote({
+        q: curr.q,
+        userOpt: curr.opts[choiceIdx],
+        correctOpt: curr.opts[curr.a],
+        explanation: curr.explanation || 'Phản xạ nhanh cần đi đôi với chính xác!',
+        reason: 'WRONG',
+      });
     }
   };
 
@@ -992,6 +1439,7 @@ function BlitzSpeedGame({ questions, packTitle }: { questions: GameQuestion[]; p
     setTimeLeft(5);
     setScore(0);
     setIsGameOver(false);
+    setFailedNote(null);
   };
 
   const curr = questions[qIdx % questions.length] || questions[0];
@@ -1049,13 +1497,46 @@ function BlitzSpeedGame({ questions, packTitle }: { questions: GameQuestion[]; p
           </div>
         </div>
       ) : (
-        <div className="py-6 space-y-3">
+        <div className="py-6 space-y-4">
           <div className="text-4xl">⚡</div>
-          <h4 className="text-xl font-black text-purple-600">HẾT GIỜ CHỚP NHOÁNG!</h4>
-          <p className="text-xs text-slate-400">Tổng điểm phản xạ siêu tốc: {score} pts</p>
+          <div>
+            <h4 className="text-xl font-black text-purple-600">
+              {failedNote?.reason === 'TIMEOUT' ? 'HẾT GIỜ CHỚP NHOÁNG!' : 'CHƯA CHÍNH XÁC!'}
+            </h4>
+            <p className="text-xs text-slate-400 mt-1">Tổng điểm phản xạ siêu tốc: {score} pts</p>
+          </div>
+
+          {/* NOTE CHO CÂU LỖI TRONG CHỚP NHOÁNG */}
+          {failedNote && (
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-left space-y-2 max-w-md mx-auto animate-in fade-in">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-rose-500">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{failedNote.reason === 'WRONG' ? 'Bạn đã trả lời sai câu hỏi:' : 'Hết 5 giây ở câu hỏi:'}</span>
+              </div>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{failedNote.q}</p>
+              
+              <div className="space-y-1 text-xs">
+                {failedNote.userOpt && (
+                  <p className="text-rose-600 dark:text-rose-400">
+                    <strong>Đáp án bạn đã chọn:</strong> {failedNote.userOpt} ❌
+                  </p>
+                )}
+                <p className="text-emerald-600 dark:text-emerald-400">
+                  <strong>Đáp án chính xác:</strong> {failedNote.correctOpt} ✓
+                </p>
+              </div>
+
+              {failedNote.explanation && (
+                <div className="text-[11px] text-slate-700 dark:text-slate-300 bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-200 dark:border-amber-800/80 leading-relaxed shadow-xs">
+                  💡 <strong>Ghi chú & Lời giải:</strong> {failedNote.explanation}
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={restart}
-            className="px-6 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md cursor-pointer transition-transform active:scale-95"
+            className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md cursor-pointer transition-transform active:scale-95"
           >
             Chơi lại lượt mới
           </button>
