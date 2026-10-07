@@ -12,7 +12,7 @@ import {
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { Quiz, UserProfile, QuizAttempt, AuditLog } from '../../types';
+import { Quiz, UserProfile, QuizAttempt, AuditLog, SupportMessage } from '../../types';
 import appletConfig from '../../../firebase-applet-config.json';
 import { getAdminAuth } from './admin';
 
@@ -408,6 +408,66 @@ export async function deleteGameSessionFromFirestore(sessionId: string): Promise
     return true;
   } catch (err) {
     console.error(`[Firebase Server] Error deleting game session ${sessionId} from Firestore:`, err);
+    return false;
+  }
+}
+
+// =============================================================================
+// SUPPORT MESSAGES & TICKETS (FIRESTORE)
+// =============================================================================
+
+export async function saveSupportMessageToFirestore(message: SupportMessage): Promise<boolean> {
+  const db = getBackendFirestore();
+  if (!db || !message.id) return false;
+
+  try {
+    const messageRef = doc(db, 'supportMessages', message.id);
+    const sanitized = sanitizeForFirestore(message);
+    await setDoc(messageRef, {
+      ...sanitized,
+      syncedAt: new Date().toISOString(),
+    }, { merge: true });
+    console.log(`[Firebase Server] Support message saved to Firestore: ${message.id}`);
+    return true;
+  } catch (err) {
+    console.error(`[Firebase Server] Error saving support message ${message.id} to Firestore:`, err);
+    return false;
+  }
+}
+
+export async function loadAllSupportMessagesFromFirestore(): Promise<SupportMessage[]> {
+  const db = getBackendFirestore();
+  if (!db) return [];
+
+  try {
+    const messagesCol = collection(db, 'supportMessages');
+    const q = query(messagesCol, orderBy('createdAt', 'desc'), limit(100));
+    const snap = await getDocs(q);
+    const list: SupportMessage[] = [];
+    snap.forEach(docSnap => {
+      const data = docSnap.data() as SupportMessage;
+      list.push(data);
+    });
+    return list;
+  } catch (err) {
+    console.error('[Firebase Server] Error loading support messages from Firestore:', err);
+    return [];
+  }
+}
+
+export async function updateSupportMessageStatusInFirestore(
+  id: string,
+  status: 'NEW' | 'IN_PROGRESS' | 'RESOLVED'
+): Promise<boolean> {
+  const db = getBackendFirestore();
+  if (!db || !id) return false;
+
+  try {
+    const messageRef = doc(db, 'supportMessages', id);
+    await setDoc(messageRef, { status, updatedAt: new Date().toISOString() }, { merge: true });
+    return true;
+  } catch (err) {
+    console.error(`[Firebase Server] Error updating support message ${id} status:`, err);
     return false;
   }
 }

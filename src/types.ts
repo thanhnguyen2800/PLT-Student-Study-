@@ -217,3 +217,16 @@ export interface CSVImportResult {
     message: string;
   }[];
 }
+
+export interface SupportMessage {
+  id: string;
+  fullName: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: 'NEW' | 'IN_PROGRESS' | 'RESOLVED';
+  createdAt: string;
+  userId?: string;
+  userRole?: string;
+}
+

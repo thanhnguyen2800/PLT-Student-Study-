@@ -36,6 +36,23 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Support messages and user feedback tickets
+    match /supportMessages/{messageId} {
+      allow create: if request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 2
+        && request.resource.data.fullName.size() <= 50
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 100
+        && request.resource.data.subject is string
+        && request.resource.data.subject.size() >= 5
+        && request.resource.data.subject.size() <= 100
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 10
+        && request.resource.data.message.size() <= 1000
+        && request.resource.data.status in ['NEW', 'IN_PROGRESS', 'RESOLVED'];
+      allow read, update, delete: if true;
+    }
+
     // Default deny for any other collections
     match /{document=**} {
       allow read, write: if false;

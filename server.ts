@@ -8,7 +8,7 @@ import { createHash } from 'crypto';
 import { dataStore } from './src/lib/db/store.js';
 import { INITIAL_USERS } from './src/lib/db/initialData.js';
 import { parseCSV } from './src/utils/csv.js';
-import { UserRole, UserProfile } from './src/types.js';
+import { UserRole, UserProfile, SupportMessage } from './src/types.js';
 import {
   getBackendFirestore,
   isFirestoreReady,
@@ -26,6 +26,9 @@ import {
   loadAllAuditLogsFromFirestore,
   saveGameSessionToFirestore,
   getGameSessionFromFirestore,
+  saveSupportMessageToFirestore,
+  loadAllSupportMessagesFromFirestore,
+  updateSupportMessageStatusInFirestore,
 } from './src/lib/firebase/serverFirestore.js';
 
 dotenv.config();
@@ -596,6 +599,179 @@ app.post('/api/admin/users/:uid/reset-password', async (req, res) => {
     res.json({ success: true, data: { newPassword: pwd } });
   } catch (err: any) {
     res.status(400).json({ success: false, error: { message: err.message } });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// Support & Feedback Messages (Stored in Firebase Firestore: /supportMessages)
+// -----------------------------------------------------------------------------
+const memorySupportMessages: SupportMessage[] = [];
+const lastSubmitTimeMap = new Map<string, number>();
+
+app.post('/api/support', async (req, res) => {
+  try {
+    const { fullName, email, subject, message, userId, userRole, website_hp } = req.body;
+
+    // 1. Anti-spam honeypot check: If the hidden honeypot input is filled, silently reject bot
+    if (website_hp) {
+      console.warn('[Anti-Spam] Bot detected via honeypot field');
+      return res.json({
+        success: true,
+        data: { id: `msg_${Date.now()}`, message: 'Cảm ơn bạn đã liên hệ!' },
+      });
+    }
+
+    // 2. Anti-spam Rate Limiting: 1 request per 15s per email or IP
+    const clientKey = String(email || req.ip || 'anonymous').toLowerCase().trim();
+    const now = Date.now();
+    const lastSubmit = lastSubmitTimeMap.get(clientKey);
+    if (lastSubmit && now - lastSubmit < 15000) {
+      const waitSeconds = Math.ceil((15000 - (now - lastSubmit)) / 1000);
+      return res.status(429).json({
+        success: false,
+        error: {
+          code: 'RATE_LIMITED',
+          message: `Vui lòng đợi ${waitSeconds} giây trước khi gửi tin nhắn tiếp theo để tránh spam.`,
+        },
+      });
+    }
+
+    // 3. Validation: Họ và tên
+    if (!fullName || typeof fullName !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_NAME', message: 'Họ và tên là bắt buộc.' },
+      });
+    }
+    const cleanName = fullName.trim();
+    if (cleanName.length < 2 || cleanName.length > 50) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'NAME_LENGTH', message: 'Họ và tên phải có độ dài từ 2 đến 50 ký tự.' },
+      });
+    }
+
+    // 4. Validation: Email RFC regex
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_EMAIL', message: 'Email là bắt buộc.' },
+      });
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(cleanEmail) || cleanEmail.length > 100) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'EMAIL_FORMAT', message: 'Định dạng email không hợp lệ (tối đa 100 ký tự).' },
+      });
+    }
+
+    // 5. Validation: Chủ đề
+    if (!subject || typeof subject !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_SUBJECT', message: 'Chủ đề là bắt buộc.' },
+      });
+    }
+    const cleanSubject = subject.trim();
+    if (cleanSubject.length < 5 || cleanSubject.length > 100) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'SUBJECT_LENGTH', message: 'Chủ đề phải có độ dài từ 5 đến 100 ký tự.' },
+      });
+    }
+
+    // 6. Validation: Nội dung tin nhắn
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_MESSAGE', message: 'Nội dung tin nhắn là bắt buộc.' },
+      });
+    }
+    const cleanMessage = message.trim();
+    if (cleanMessage.length < 10 || cleanMessage.length > 1000) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'MESSAGE_LENGTH', message: 'Nội dung tin nhắn phải từ 10 đến 1000 ký tự để mô tả chi tiết yêu cầu.' },
+      });
+    }
+
+    // Construct support message document
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const newSupportMessage: SupportMessage = {
+      id: messageId,
+      fullName: cleanName,
+      email: cleanEmail,
+      subject: cleanSubject,
+      message: cleanMessage,
+      status: 'NEW',
+      createdAt: new Date().toISOString(),
+      userId: userId || undefined,
+      userRole: userRole || undefined,
+    };
+
+    // Store in memory
+    memorySupportMessages.unshift(newSupportMessage);
+    lastSubmitTimeMap.set(clientKey, now);
+
+    // Store in Firebase Firestore collection `/supportMessages`
+    let savedToFirebase = false;
+    if (isFirestoreReady()) {
+      savedToFirebase = await saveSupportMessageToFirestore(newSupportMessage);
+    }
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        id: messageId,
+        ticketCode: messageId.replace('msg_', 'TK-').toUpperCase(),
+        savedToFirebase,
+        message: 'Gửi yêu cầu hỗ trợ thành công. Đội ngũ kỹ thuật sẽ phản hồi qua email của bạn sớm nhất!',
+      },
+    });
+  } catch (err: any) {
+    console.error('Error saving support message:', err);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'SERVER_ERROR', message: err.message || 'Lỗi hệ thống khi gửi tin nhắn hỗ trợ' },
+    });
+  }
+});
+
+app.get('/api/admin/support-messages', async (req, res) => {
+  try {
+    let list: SupportMessage[] = [];
+    if (isFirestoreReady()) {
+      list = await loadAllSupportMessagesFromFirestore();
+    }
+    if (list.length === 0) {
+      list = [...memorySupportMessages];
+    }
+    res.json({ success: true, data: list });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+});
+
+app.patch('/api/admin/support-messages/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    if (!['NEW', 'IN_PROGRESS', 'RESOLVED'].includes(status)) {
+      return res.status(400).json({ success: false, error: { message: 'Trạng thái không hợp lệ' } });
+    }
+
+    if (isFirestoreReady()) {
+      await updateSupportMessageStatusInFirestore(id, status);
+    }
+    const memItem = memorySupportMessages.find(m => m.id === id);
+    if (memItem) {
+      memItem.status = status;
+    }
+    res.json({ success: true, message: 'Cập nhật trạng thái thành công' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: err.message } });
   }
 });
 

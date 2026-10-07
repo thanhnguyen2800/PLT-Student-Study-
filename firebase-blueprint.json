@@ -103,6 +103,23 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "pin", "quizId", "hostId", "status"]
+    },
+    "SupportMessage": {
+      "title": "SupportMessage",
+      "description": "User support inquiries, questions, and feedback tickets",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 50 },
+        "email": { "type": "string", "format": "email", "maxLength": 100 },
+        "subject": { "type": "string", "minLength": 5, "maxLength": 100 },
+        "message": { "type": "string", "minLength": 10, "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["NEW", "IN_PROGRESS", "RESOLVED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" },
+        "userRole": { "type": "string" }
+      },
+      "required": ["id", "fullName", "email", "subject", "message", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -129,6 +146,10 @@
     "/auditLogs/{logId}": {
       "schema": "AuditLog",
       "description": "Admin security and permission logs"
+    },
+    "/supportMessages/{messageId}": {
+      "schema": "SupportMessage",
+      "description": "User feedback and technical support tickets stored in Firebase Firestore"
     }
   }
 }

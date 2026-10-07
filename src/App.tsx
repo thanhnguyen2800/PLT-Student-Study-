@@ -16,6 +16,7 @@ import { AdminPage } from './pages/AdminPage';
 import { LoginPage } from './pages/LoginPage';
 import { Sparkles, Bot } from 'lucide-react';
 import { PltLogo } from './components/common/PltLogo';
+import { Footer } from './components/layout/Footer';
 
 function MainApp() {
   const { currentUser, isLoading } = useAuth();
@@ -176,20 +177,8 @@ function MainApp() {
         }}
       />
 
-      {/* Footer - Enlarged, clean & modern */}
-      <footer className="mt-auto border-t border-sky-200/70 dark:border-sky-900/40 bg-white/80 dark:bg-[#07192d]/85 backdrop-blur-md py-8 text-slate-600 dark:text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <PltLogo size="sm" />
-            <span className="text-base font-extrabold text-slate-800 dark:text-slate-200">
-              STUDENT STUDY
-            </span>
-          </div>
-          <p className="text-sm text-center sm:text-right">
-            © {new Date().getFullYear()} STUDENT STUDY by PLT SOLUTIONS. Nền tảng học tập & ôn luyện kiến thức thế hệ mới.
-          </p>
-        </div>
-      </footer>
+      {/* Footer with Contact Strip, Support & Disclaimer modaled actions */}
+      <Footer onNavigate={handleNavigate} />
     </div>
   );
 }
