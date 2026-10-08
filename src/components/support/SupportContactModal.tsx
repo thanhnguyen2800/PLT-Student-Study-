@@ -120,7 +120,7 @@ export const SupportContactModal: React.FC<SupportContactModalProps> = ({
     const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const ticketCode = messageId.replace('msg_', 'TK-').toUpperCase();
 
-    const payload = {
+    const payload: Record<string, any> = {
       id: messageId,
       fullName: cleanName,
       email: cleanEmail,
@@ -128,41 +128,66 @@ export const SupportContactModal: React.FC<SupportContactModalProps> = ({
       message: cleanMessage,
       status: 'NEW',
       createdAt: new Date().toISOString(),
-      userId: currentUser?.uid || undefined,
-      userRole: currentUser?.role || undefined,
     };
+    if (currentUser?.uid) payload.userId = currentUser.uid;
+    if (currentUser?.role) payload.userRole = currentUser.role;
 
     try {
       // 1. Save directly to Firebase Firestore collection 'supportMessages'
+      let savedToFirestore = false;
       const firestore = getClientFirestore();
       if (firestore) {
         try {
           const docRef = doc(firestore, 'supportMessages', messageId);
           await setDoc(docRef, payload, { merge: true });
+          savedToFirestore = true;
         } catch (fbErr) {
-          console.warn('[Firebase] Client Firestore write notice:', fbErr);
+          console.warn('[Firebase] Client Firestore write error:', fbErr);
         }
       }
 
       // 2. Also send to server proxy route for database synchronization & email alerts
-      const response = await fetch('/api/support', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      let savedToServer = false;
+      try {
+        const response = await fetch('/api/support', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
 
-      const json = await response.json();
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const json = await response.json();
+          if (response.ok && json.success) {
+            savedToServer = true;
+          } else if (!savedToFirestore && !response.ok) {
+            throw new Error(json.error?.message || 'Không thể gửi tin nhắn hỗ trợ lúc này.');
+          }
+        } else if (response.ok) {
+          savedToServer = true;
+        }
+      } catch (apiErr: any) {
+        console.warn('[API] Support route notification:', apiErr);
+        if (!savedToFirestore) {
+          throw new Error(
+            apiErr.message?.includes('JSON')
+              ? 'Máy chủ không thể xử lý yêu cầu lúc này. Vui lòng thử lại sau.'
+              : (apiErr.message || 'Không thể kết nối đến máy chủ.')
+          );
+        }
+      }
 
-      if (!response.ok && !json.success) {
-        throw new Error(json.error?.message || 'Không thể gửi tin nhắn hỗ trợ lúc này.');
+      // Verify that at least one storage layer succeeded
+      if (!savedToFirestore && !savedToServer) {
+        throw new Error('Đã có lỗi xảy ra khi lưu tin nhắn hỗ trợ. Vui lòng kiểm tra lại kết nối mạng.');
       }
 
       // Success
       localStorage.setItem('last_support_submit_ts', String(Date.now()));
       setCooldownSeconds(20);
       setSubmitSuccess({
-        ticketCode: json.data?.ticketCode || ticketCode,
-        message: json.data?.message || 'Yêu cầu của bạn đã được gửi thành công!',
+        ticketCode: ticketCode,
+        message: 'Yêu cầu của bạn đã được gửi thành công!',
       });
     } catch (err: any) {
       console.error('Error submitting support ticket:', err);
