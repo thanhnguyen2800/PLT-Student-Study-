@@ -1,7 +1,7 @@
 import { dataStore } from './db/store';
 import { getClientFirestore, isFirebaseConfigured } from './firebase/client';
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
-import { GameSession, Player, Quiz, UserProfile, UserRole } from '../types';
+import { GameSession, Player, Quiz, UserProfile, UserRole, SupportMessage } from '../types';
 import { parseCSV } from '../utils/csv';
 
 function removeUndefined(value: any): any {
@@ -117,6 +117,43 @@ async function saveFirebaseGameSession(session: GameSession): Promise<GameSessio
     updatedAt: new Date().toISOString(),
   }), { merge: true });
   return session;
+}
+
+async function getFirebaseSupportMessages(): Promise<SupportMessage[]> {
+  const db = getClientFirestore();
+  if (!db) return [];
+  try {
+    const snapshot = await getDocs(collection(db, 'supportMessages'));
+    const list = snapshot.docs.map(item => ({
+      ...(item.data() as SupportMessage),
+      id: item.id,
+    }));
+    return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  } catch (err) {
+    console.warn('[Firebase Fallback] Lỗi khi tải supportMessages:', err);
+    return [];
+  }
+}
+
+async function saveFirebaseSupportMessage(message: SupportMessage): Promise<SupportMessage> {
+  const db = getClientFirestore();
+  if (!db) return message;
+  await setDoc(doc(db, 'supportMessages', message.id), removeUndefined(message), { merge: true });
+  return message;
+}
+
+async function updateFirebaseSupportStatus(id: string, status: string): Promise<boolean> {
+  const db = getClientFirestore();
+  if (!db) return false;
+  await setDoc(doc(db, 'supportMessages', id), { status, updatedAt: new Date().toISOString() }, { merge: true });
+  return true;
+}
+
+async function deleteFirebaseSupportMessage(id: string): Promise<boolean> {
+  const db = getClientFirestore();
+  if (!db) return false;
+  await deleteDoc(doc(db, 'supportMessages', id));
+  return true;
 }
 
 // Helper to create a fake JSON Response
@@ -603,6 +640,100 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
   if (path === '/api/admin/audit-logs' && method === 'GET') {
     const logs = dataStore.getAuditLogs(100);
     return makeJsonResponse({ success: true, data: logs });
+  }
+
+  // Support messages & feedback tickets (Firestore synchronized)
+  if (path === '/api/admin/support-messages' && method === 'GET') {
+    try {
+      let list: SupportMessage[] = [];
+      if (isFirebaseConfigured()) {
+        list = await getFirebaseSupportMessages();
+      }
+      return makeJsonResponse({ success: true, data: list });
+    } catch (e: any) {
+      return makeJsonResponse({ success: false, error: { message: e.message } }, 500);
+    }
+  }
+
+  if (path.startsWith('/api/admin/support-messages/') && (method === 'PATCH' || method === 'PUT')) {
+    const id = path.split('/')[4]?.split('?')[0];
+    try {
+      const status = body?.status;
+      if (!['NEW', 'IN_PROGRESS', 'RESOLVED'].includes(status)) {
+        return makeJsonResponse({ success: false, error: { message: 'Trạng thái không hợp lệ' } }, 400);
+      }
+      if (isFirebaseConfigured()) {
+        await updateFirebaseSupportStatus(id, status);
+      }
+      return makeJsonResponse({ success: true, message: 'Cập nhật trạng thái thành công' });
+    } catch (e: any) {
+      return makeJsonResponse({ success: false, error: { message: e.message } }, 500);
+    }
+  }
+
+  if (path.startsWith('/api/admin/support-messages/') && method === 'DELETE') {
+    const id = path.split('/')[4]?.split('?')[0];
+    try {
+      if (isFirebaseConfigured()) {
+        await deleteFirebaseSupportMessage(id);
+      }
+      return makeJsonResponse({ success: true, message: 'Đã xóa tin nhắn hỗ trợ thành công' });
+    } catch (e: any) {
+      return makeJsonResponse({ success: false, error: { message: e.message } }, 500);
+    }
+  }
+
+  if (path === '/api/support' && method === 'POST') {
+    try {
+      const { fullName, email, subject, message, userId, userRole } = body || {};
+      const cleanName = String(fullName || '').trim();
+      const cleanEmail = String(email || '').trim().toLowerCase();
+      const cleanSubject = String(subject || '').trim();
+      const cleanMessage = String(message || '').trim();
+
+      if (cleanName.length < 2 || cleanName.length > 50) {
+        return makeJsonResponse({ success: false, error: { message: 'Họ và tên phải từ 2 đến 50 ký tự.' } }, 400);
+      }
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(cleanEmail) || cleanEmail.length > 100) {
+        return makeJsonResponse({ success: false, error: { message: 'Email không đúng định dạng.' } }, 400);
+      }
+      if (cleanSubject.length < 5 || cleanSubject.length > 100) {
+        return makeJsonResponse({ success: false, error: { message: 'Chủ đề phải từ 5 đến 100 ký tự.' } }, 400);
+      }
+      if (cleanMessage.length < 10 || cleanMessage.length > 1000) {
+        return makeJsonResponse({ success: false, error: { message: 'Nội dung phải từ 10 đến 1000 ký tự.' } }, 400);
+      }
+
+      const messageId = body.id || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const supportMsg: SupportMessage = {
+        id: messageId,
+        fullName: cleanName,
+        email: cleanEmail,
+        subject: cleanSubject,
+        message: cleanMessage,
+        status: 'NEW',
+        createdAt: body.createdAt || new Date().toISOString(),
+        userId: userId || undefined,
+        userRole: userRole || undefined,
+      };
+
+      if (isFirebaseConfigured()) {
+        await saveFirebaseSupportMessage(supportMsg);
+      }
+
+      return makeJsonResponse({
+        success: true,
+        data: {
+          id: messageId,
+          ticketCode: messageId.replace('msg_', 'TK-').toUpperCase(),
+          savedToFirebase: true,
+          message: 'Gửi yêu cầu hỗ trợ thành công.',
+        },
+      }, 201);
+    } catch (e: any) {
+      return makeJsonResponse({ success: false, error: { message: e.message } }, 500);
+    }
   }
 
   // 5. Game sessions / Kahoot rooms

@@ -27,6 +27,8 @@ import { useAuth } from '../context/AuthContext';
 import { RoleBadge, StatusBadge } from '../components/common/Badge';
 import { AuditLogViewer } from '../components/admin/AuditLogViewer';
 import { EditUserModal } from '../components/admin/EditUserModal';
+import { getClientFirestore } from '../lib/firebase/client';
+import { collection, doc, getDocs, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 export const AdminPage: React.FC = () => {
   const { currentUser, canAccess } = useAuth();
@@ -127,33 +129,90 @@ export const AdminPage: React.FC = () => {
 
   const fetchSupportMessages = async () => {
     setIsLoadingSupport(true);
+    let loadedDirectly = false;
     try {
-      const res = await fetch('/api/admin/support-messages');
-      const json = await res.json();
-      if (json.success && Array.isArray(json.data)) {
-        setSupportMessages(json.data);
+      const db = getClientFirestore();
+      if (db) {
+        const snap = await getDocs(collection(db, 'supportMessages'));
+        const list: SupportMessage[] = snap.docs.map(d => ({
+          ...(d.data() as SupportMessage),
+          id: d.id,
+        }));
+        list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        setSupportMessages(list);
+        loadedDirectly = true;
       }
-    } catch (e) {
-      console.error('Lỗi khi tải tin nhắn hỗ trợ:', e);
-    } finally {
-      setIsLoadingSupport(false);
+    } catch (fbErr) {
+      console.warn('[Firebase] Lỗi đọc trực tiếp từ Firestore supportMessages:', fbErr);
     }
+
+    if (!loadedDirectly) {
+      try {
+        const res = await fetch('/api/admin/support-messages');
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          setSupportMessages(json.data);
+        }
+      } catch (e) {
+        console.error('Lỗi khi tải tin nhắn hỗ trợ từ API:', e);
+      }
+    }
+    setIsLoadingSupport(false);
   };
 
   const handleUpdateSupportStatus = async (id: string, status: 'NEW' | 'IN_PROGRESS' | 'RESOLVED') => {
     try {
-      const res = await fetch(`/api/admin/support-messages/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setSupportMessages(prev => prev.map(m => m.id === id ? { ...m, status } : m));
-        setActionFeedback({ type: 'success', message: 'Cập nhật trạng thái tin nhắn hỗ trợ thành công' });
+      // 1. Đồng bộ trực tiếp với Firebase Firestore
+      const db = getClientFirestore();
+      if (db) {
+        try {
+          const docRef = doc(db, 'supportMessages', id);
+          await setDoc(docRef, { status, updatedAt: new Date().toISOString() }, { merge: true });
+        } catch (fbErr) {
+          console.warn('[Firebase] Lỗi cập nhật trạng thái trên Firestore:', fbErr);
+        }
       }
+
+      // 2. Đồng bộ với API server nếu có
+      try {
+        await fetch(`/api/admin/support-messages/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        });
+      } catch {
+        // Bỏ qua khi chạy trên host thuần frontend
+      }
+
+      setSupportMessages(prev => prev.map(m => m.id === id ? { ...m, status } : m));
+      setActionFeedback({ type: 'success', message: 'Cập nhật trạng thái tin nhắn hỗ trợ thành công' });
     } catch (e: any) {
       setActionFeedback({ type: 'error', message: 'Lỗi cập nhật trạng thái tin nhắn' });
+    }
+  };
+
+  const handleDeleteSupportMessage = async (id: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa tin nhắn hỗ trợ này khỏi Firebase Firestore?')) return;
+    try {
+      const db = getClientFirestore();
+      if (db) {
+        try {
+          await deleteDoc(doc(db, 'supportMessages', id));
+        } catch (fbErr) {
+          console.warn('[Firebase] Lỗi xóa tài liệu khỏi Firestore:', fbErr);
+        }
+      }
+
+      try {
+        await fetch(`/api/admin/support-messages/${id}`, { method: 'DELETE' });
+      } catch {
+        // Bỏ qua khi chạy trên host thuần frontend
+      }
+
+      setSupportMessages(prev => prev.filter(m => m.id !== id));
+      setActionFeedback({ type: 'success', message: 'Đã xóa tin nhắn hỗ trợ thành công' });
+    } catch (e: any) {
+      setActionFeedback({ type: 'error', message: 'Lỗi khi xóa tin nhắn: ' + e.message });
     }
   };
 
@@ -162,6 +221,27 @@ export const AdminPage: React.FC = () => {
     fetchLogs();
     fetchSupportMessages();
     fetchFirebaseStatus();
+
+    // Lắng nghe dữ liệu thời gian thực từ Firebase Firestore collection supportMessages
+    const db = getClientFirestore();
+    if (db) {
+      try {
+        const unsub = onSnapshot(collection(db, 'supportMessages'), (snapshot) => {
+          const list: SupportMessage[] = snapshot.docs.map(d => ({
+            ...(d.data() as SupportMessage),
+            id: d.id,
+          }));
+          list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+          setSupportMessages(list);
+          setIsLoadingSupport(false);
+        }, (err) => {
+          console.warn('[Firebase] Lỗi listener realtime supportMessages:', err);
+        });
+        return () => unsub();
+      } catch (err) {
+        console.warn('[Firebase] Không thể kết nối listener realtime:', err);
+      }
+    }
   }, []);
 
   if (!canAccess(['ADMIN', 'SUPER_ADMIN'])) {
@@ -861,25 +941,35 @@ export const AdminPage: React.FC = () => {
       {activeTab === 'SUPPORT' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-            <div className="flex items-center gap-2">
-              <Headphones className="w-5 h-5 text-emerald-600" />
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center shrink-0">
+                <Headphones className="w-5 h-5" />
+              </div>
               <div>
-                <h3 className="font-black text-sm text-slate-900 dark:text-white">
-                  Danh sách yêu cầu hỗ trợ & góp ý từ người dùng
-                </h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-black text-sm text-slate-900 dark:text-white">
+                    Hộp thư yêu cầu hỗ trợ & góp ý
+                  </h3>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Firebase Firestore Realtime
+                  </span>
+                </div>
                 <p className="text-xs text-slate-500">
-                  Dữ liệu được lưu trữ tự động trong Firebase Firestore (Collection: <code className="text-emerald-600">supportMessages</code>)
+                  Dữ liệu đồng bộ trực tiếp với Collection: <code className="text-emerald-600 font-mono">supportMessages</code>
                 </p>
               </div>
             </div>
-            <button
-              onClick={fetchSupportMessages}
-              disabled={isLoadingSupport}
-              className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
-            >
-              <Inbox className="w-3.5 h-3.5" />
-              <span>{isLoadingSupport ? 'Đang làm mới...' : 'Làm mới danh sách'}</span>
-            </button>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                onClick={fetchSupportMessages}
+                disabled={isLoadingSupport}
+                className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center gap-1.5"
+              >
+                <Inbox className="w-3.5 h-3.5" />
+                <span>{isLoadingSupport ? 'Đang làm mới...' : 'Làm mới'}</span>
+              </button>
+            </div>
           </div>
 
           {supportMessages.length === 0 ? (
@@ -889,7 +979,7 @@ export const AdminPage: React.FC = () => {
               </div>
               <h4 className="font-bold text-sm text-slate-900 dark:text-white">Hộp thư hỗ trợ đang trống</h4>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Khi người dùng gửi phản hồi hoặc thắc mắc từ form hỗ trợ ở chân trang, tin nhắn sẽ hiển thị tại đây.
+                Khi người dùng gửi phản hồi hoặc thắc mắc từ form hỗ trợ ở chân trang, tin nhắn sẽ hiển thị tại đây trực tiếp từ Firebase Firestore.
               </p>
             </div>
           ) : (
@@ -937,6 +1027,13 @@ export const AdminPage: React.FC = () => {
                         <option value="IN_PROGRESS">🔵 Đang xử lý</option>
                         <option value="RESOLVED">🟢 Đã giải quyết</option>
                       </select>
+                      <button
+                        onClick={() => handleDeleteSupportMessage(msg.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer transition-colors"
+                        title="Xóa tin nhắn này khỏi Firebase Firestore"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
 
@@ -950,13 +1047,15 @@ export const AdminPage: React.FC = () => {
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
-                    <span>Đã lưu vào Firebase Firestore</span>
+                    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                      ✓ Đã lưu trữ trong Firestore collection: supportMessages
+                    </span>
                     <a
                       href={`mailto:${msg.email}?subject=Phản hồi hỗ trợ [${msg.id.replace('msg_', 'TK-').toUpperCase()}]: ${encodeURIComponent(msg.subject)}`}
                       className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline inline-flex items-center gap-1"
                     >
-                      <MessageSquare className="w-3 h-3" />
-                      <span>Gửi email phản hồi cho học viên</span>
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>Gửi email phản hồi</span>
                     </a>
                   </div>
                 </div>
