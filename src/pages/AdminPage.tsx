@@ -20,7 +20,13 @@ import {
   ChevronRight,
   Headphones,
   Inbox,
-  MessageSquare
+  MessageSquare,
+  Eye,
+  Mail,
+  RefreshCw,
+  Filter,
+  X,
+  FileSpreadsheet
 } from 'lucide-react';
 import { User, UserRole, UserStatus, AuditLog, SupportMessage } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -37,6 +43,9 @@ export const AdminPage: React.FC = () => {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
   const [isLoadingSupport, setIsLoadingSupport] = useState(false);
+  const [supportSearch, setSupportSearch] = useState('');
+  const [supportStatusFilter, setSupportStatusFilter] = useState<'ALL' | 'NEW' | 'IN_PROGRESS' | 'RESOLVED'>('ALL');
+  const [selectedSupportMessage, setSelectedSupportMessage] = useState<SupportMessage | null>(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
   
@@ -191,8 +200,10 @@ export const AdminPage: React.FC = () => {
     }
   };
 
-  const handleDeleteSupportMessage = async (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa tin nhắn hỗ trợ này khỏi Firebase Firestore?')) return;
+  const handleDeleteSupportMessage = async (id: string, skipConfirm = false) => {
+    if (!skipConfirm && typeof window !== 'undefined' && window.confirm) {
+      if (!window.confirm('Bạn có chắc chắn muốn xóa tin nhắn hỗ trợ này khỏi Firebase Firestore?')) return;
+    }
     try {
       const db = getClientFirestore();
       if (db) {
@@ -210,10 +221,38 @@ export const AdminPage: React.FC = () => {
       }
 
       setSupportMessages(prev => prev.filter(m => m.id !== id));
+      if (selectedSupportMessage?.id === id) {
+        setSelectedSupportMessage(null);
+      }
       setActionFeedback({ type: 'success', message: 'Đã xóa tin nhắn hỗ trợ thành công' });
     } catch (e: any) {
       setActionFeedback({ type: 'error', message: 'Lỗi khi xóa tin nhắn: ' + e.message });
     }
+  };
+
+  const handleExportSupportCSV = () => {
+    const headers = ['STT', 'Mã Phiếu', 'Họ và tên', 'Email', 'Vai trò', 'Chủ đề', 'Nội dung', 'Trạng thái', 'Thời gian gửi'];
+    const rows = filteredSupportMessages.map((m, idx) => [
+      `"${idx + 1}"`,
+      `"${(m.id || '').replace(/"/g, '""')}"`,
+      `"${(m.fullName || '').replace(/"/g, '""')}"`,
+      `"${(m.email || '').replace(/"/g, '""')}"`,
+      `"${(m.userRole || '').replace(/"/g, '""')}"`,
+      `"${(m.subject || '').replace(/"/g, '""')}"`,
+      `"${(m.message || '').replace(/"/g, '""')}"`,
+      `"${m.status}"`,
+      `"${new Date(m.createdAt).toLocaleString('vi-VN')}"`,
+    ]);
+    const csvString = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `support_messages_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   useEffect(() => {
@@ -559,6 +598,24 @@ export const AdminPage: React.FC = () => {
     return false;
   };
 
+  // Support filter and metrics for Selenium testing & admin monitoring
+  const totalSupportCount = supportMessages.length;
+  const newSupportCount = supportMessages.filter(m => m.status === 'NEW').length;
+  const inProgressSupportCount = supportMessages.filter(m => m.status === 'IN_PROGRESS').length;
+  const resolvedSupportCount = supportMessages.filter(m => m.status === 'RESOLVED').length;
+
+  const filteredSupportMessages = supportMessages.filter(m => {
+    const q = supportSearch.toLowerCase().trim();
+    const matchSearch = !q || 
+      (m.fullName || '').toLowerCase().includes(q) ||
+      (m.email || '').toLowerCase().includes(q) ||
+      (m.subject || '').toLowerCase().includes(q) ||
+      (m.message || '').toLowerCase().includes(q) ||
+      (m.id || '').toLowerCase().includes(q);
+    const matchStatus = supportStatusFilter === 'ALL' || m.status === supportStatusFilter;
+    return matchSearch && matchStatus;
+  });
+
   return (
     <div className="space-y-6 animate-in fade-in pb-12">
       
@@ -572,18 +629,13 @@ export const AdminPage: React.FC = () => {
           <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mt-1">
             Cấp phát tài khoản, phân quyền học viên/giảng viên và giám sát nhật ký bảo mật
           </p>
-          {firebaseInfo?.connected && (
-            <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="font-bold">Cloud Firestore ({firebaseInfo.project?.projectId}):</span>
-              <span>Đã kết nối qua Backend Proxy (Bảo mật tối đa, không lộ API key trên UI)</span>
-            </div>
-          )}
         </div>
 
         {/* Tab switcher */}
         <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <button
+            id="tab-btn-users"
+            data-testid="tab-btn-users"
             onClick={() => setActiveTab('USERS')}
             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
               activeTab === 'USERS'
@@ -594,6 +646,8 @@ export const AdminPage: React.FC = () => {
             Tài khoản ({userList.length})
           </button>
           <button
+            id="tab-btn-logs"
+            data-testid="tab-btn-logs"
             onClick={() => setActiveTab('LOGS')}
             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
               activeTab === 'LOGS'
@@ -604,6 +658,8 @@ export const AdminPage: React.FC = () => {
             Nhật ký Audit ({logList.length})
           </button>
           <button
+            id="tab-btn-metrics"
+            data-testid="tab-btn-metrics"
             onClick={() => setActiveTab('METRICS')}
             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
               activeTab === 'METRICS'
@@ -614,6 +670,8 @@ export const AdminPage: React.FC = () => {
             Thống kê
           </button>
           <button
+            id="tab-btn-support"
+            data-testid="tab-btn-support"
             onClick={() => {
               setActiveTab('SUPPORT');
               fetchSupportMessages();
@@ -937,131 +995,486 @@ export const AdminPage: React.FC = () => {
         </div>
       )}
 
-      {/* --- TAB 4: SUPPORT MESSAGES & TICKETS --- */}
+      {/* --- TAB 4: SUPPORT MESSAGES & TICKETS (SELENIUM-TESTABLE TABLE FORMAT) --- */}
       {activeTab === 'SUPPORT' && (
         <div className="space-y-4">
+          
+          {/* Header Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center shrink-0">
                 <Headphones className="w-5 h-5" />
               </div>
               <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-black text-sm text-slate-900 dark:text-white">
-                    Hộp thư yêu cầu hỗ trợ & góp ý
-                  </h3>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Firebase Firestore Realtime
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Dữ liệu đồng bộ trực tiếp với Collection: <code className="text-emerald-600 font-mono">supportMessages</code>
-                </p>
+                <h3 className="font-black text-sm text-slate-900 dark:text-white">
+                  Hộp thư yêu cầu hỗ trợ & góp ý
+                </h3>
               </div>
             </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto">
+            
+            <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
               <button
+                id="support-btn-export-csv"
+                data-testid="support-btn-export-csv"
+                onClick={handleExportSupportCSV}
+                disabled={filteredSupportMessages.length === 0}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                title="Xuất dữ liệu bảng ra file CSV để đối chiếu tự động"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Xuất CSV</span>
+              </button>
+              
+              <button
+                id="support-btn-refresh"
+                data-testid="support-btn-refresh"
                 onClick={fetchSupportMessages}
                 disabled={isLoadingSupport}
-                className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center gap-1.5 transition-colors"
               >
-                <Inbox className="w-3.5 h-3.5" />
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingSupport ? 'animate-spin' : ''}`} />
                 <span>{isLoadingSupport ? 'Đang làm mới...' : 'Làm mới'}</span>
               </button>
             </div>
           </div>
 
-          {supportMessages.length === 0 ? (
-            <div className="bg-white dark:bg-slate-900 p-12 rounded-3xl border border-slate-200 dark:border-slate-800 text-center space-y-3">
+          {/* Quick Metrics Cards (Easy for Selenium assertions) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div 
+              id="card-stat-support-total" 
+              data-testid="card-stat-support-total"
+              className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs cursor-pointer hover:border-slate-300 transition-colors"
+              onClick={() => setSupportStatusFilter('ALL')}
+            >
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Tổng tin nhắn</p>
+              <p id="stat-support-total" data-testid="stat-support-total" className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                {totalSupportCount}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Toàn bộ phiếu hỗ trợ</p>
+            </div>
+
+            <div 
+              id="card-stat-support-new" 
+              data-testid="card-stat-support-new"
+              className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-amber-200 dark:border-amber-900/60 shadow-xs cursor-pointer hover:border-amber-300 transition-colors"
+              onClick={() => setSupportStatusFilter('NEW')}
+            >
+              <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                Chờ xử lý (Mới)
+              </p>
+              <p id="stat-support-new" data-testid="stat-support-new" className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
+                {newSupportCount}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Cần tiếp nhận phản hồi</p>
+            </div>
+
+            <div 
+              id="card-stat-support-in-progress" 
+              data-testid="card-stat-support-in-progress"
+              className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-blue-200 dark:border-blue-900/60 shadow-xs cursor-pointer hover:border-blue-300 transition-colors"
+              onClick={() => setSupportStatusFilter('IN_PROGRESS')}
+            >
+              <p className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                Đang xử lý
+              </p>
+              <p id="stat-support-in-progress" data-testid="stat-support-in-progress" className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">
+                {inProgressSupportCount}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Đội ngũ đang giải quyết</p>
+            </div>
+
+            <div 
+              id="card-stat-support-resolved" 
+              data-testid="card-stat-support-resolved"
+              className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 shadow-xs cursor-pointer hover:border-emerald-300 transition-colors"
+              onClick={() => setSupportStatusFilter('RESOLVED')}
+            >
+              <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                Đã giải quyết
+              </p>
+              <p id="stat-support-resolved" data-testid="stat-support-resolved" className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                {resolvedSupportCount}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Hoàn tất hỗ trợ</p>
+            </div>
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+            <div className="relative flex-1 w-full">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                id="support-search-input"
+                data-testid="support-search-input"
+                type="text"
+                value={supportSearch}
+                onChange={e => setSupportSearch(e.target.value)}
+                placeholder="Tìm kiếm theo họ tên, email, chủ đề, nội dung, mã ticket..."
+                className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20 text-slate-900 dark:text-white"
+              />
+              {supportSearch && (
+                <button
+                  onClick={() => setSupportSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  title="Xóa tìm kiếm"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 text-xs w-full sm:w-auto">
+                <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span className="text-slate-400 font-medium whitespace-nowrap">Lọc:</span>
+                <select
+                  id="support-status-filter"
+                  data-testid="support-status-filter"
+                  value={supportStatusFilter}
+                  onChange={e => setSupportStatusFilter(e.target.value as any)}
+                  className="bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer text-xs"
+                >
+                  <option value="ALL">Tất cả ({totalSupportCount})</option>
+                  <option value="NEW">🟡 Mới ({newSupportCount})</option>
+                  <option value="IN_PROGRESS">🔵 Đang xử lý ({inProgressSupportCount})</option>
+                  <option value="RESOLVED">🟢 Đã giải quyết ({resolvedSupportCount})</option>
+                </select>
+              </div>
+
+              {(supportSearch || supportStatusFilter !== 'ALL') && (
+                <button
+                  onClick={() => {
+                    setSupportSearch('');
+                    setSupportStatusFilter('ALL');
+                  }}
+                  className="px-2.5 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl cursor-pointer whitespace-nowrap font-medium"
+                >
+                  Xóa bộ lọc
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* MAIN DATA TABLE FOR SELENIUM AUTOMATED TESTING */}
+          {filteredSupportMessages.length === 0 ? (
+            <div className="bg-white dark:bg-slate-900 p-12 rounded-3xl border border-slate-200 dark:border-slate-800 text-center space-y-3" data-testid="support-empty-state">
               <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center mx-auto">
                 <Inbox className="w-6 h-6" />
               </div>
-              <h4 className="font-bold text-sm text-slate-900 dark:text-white">Hộp thư hỗ trợ đang trống</h4>
+              <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                {supportMessages.length === 0 ? 'Hộp thư hỗ trợ đang trống' : 'Không có kết quả khớp với bộ lọc'}
+              </h4>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Khi người dùng gửi phản hồi hoặc thắc mắc từ form hỗ trợ ở chân trang, tin nhắn sẽ hiển thị tại đây trực tiếp từ Firebase Firestore.
+                {supportMessages.length === 0 
+                  ? 'Khi người dùng gửi phản hồi hoặc thắc mắc từ form hỗ trợ ở chân trang, tin nhắn sẽ hiển thị tại đây trực tiếp từ Firebase Firestore.'
+                  : 'Hãy thử thay đổi từ khóa tìm kiếm hoặc chọn "Tất cả trạng thái".'}
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {supportMessages.map(msg => (
-                <div 
-                  key={msg.id}
-                  className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
-                        {msg.id.replace('msg_', 'TK-').toUpperCase()}
-                      </span>
-                      <span className="font-bold text-xs text-slate-900 dark:text-white">
-                        {msg.fullName}
-                      </span>
-                      <span className="text-xs text-slate-400">
-                        &lt;{msg.email}&gt;
-                      </span>
-                      {msg.userRole && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
-                          {msg.userRole}
-                        </span>
-                      )}
-                    </div>
+            <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+              <table 
+                id="support-messages-table" 
+                data-testid="support-messages-table" 
+                className="w-full text-left border-collapse text-xs"
+              >
+                <thead className="bg-slate-50/90 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold uppercase text-[10px] tracking-wider select-none">
+                  <tr>
+                    <th id="th-support-index" data-testid="th-support-index" className="py-3 px-3 text-center w-12">#</th>
+                    <th id="th-support-id" data-testid="th-support-id" className="py-3 px-3.5 whitespace-nowrap">Mã phiếu (ID)</th>
+                    <th id="th-support-fullname" data-testid="th-support-fullname" className="py-3 px-3.5 whitespace-nowrap">Họ và tên</th>
+                    <th id="th-support-email" data-testid="th-support-email" className="py-3 px-3.5 whitespace-nowrap">Email</th>
+                    <th id="th-support-subject" data-testid="th-support-subject" className="py-3 px-3.5 min-w-[140px]">Chủ đề</th>
+                    <th id="th-support-message" data-testid="th-support-message" className="py-3 px-3.5 min-w-[220px]">Nội dung phản hồi</th>
+                    <th id="th-support-status" data-testid="th-support-status" className="py-3 px-3.5 whitespace-nowrap">Trạng thái</th>
+                    <th id="th-support-created-at" data-testid="th-support-created-at" className="py-3 px-3.5 whitespace-nowrap">Thời gian gửi</th>
+                    <th id="th-support-actions" data-testid="th-support-actions" className="py-3 px-3 text-center whitespace-nowrap w-24">Hành động</th>
+                  </tr>
+                </thead>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-slate-400">
+                <tbody 
+                  id="support-messages-tbody" 
+                  data-testid="support-messages-tbody" 
+                  className="divide-y divide-slate-100 dark:divide-slate-800"
+                >
+                  {filteredSupportMessages.map((msg, idx) => (
+                    <tr 
+                      key={msg.id}
+                      id={`support-row-${msg.id}`}
+                      data-testid="support-row"
+                      data-ticket-id={msg.id}
+                      data-row-index={idx + 1}
+                      className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors group"
+                    >
+                      {/* 1. STT */}
+                      <td 
+                        id={`support-cell-index-${msg.id}`}
+                        data-testid="support-cell-index"
+                        className="py-3.5 px-3 text-center font-mono font-bold text-slate-400"
+                      >
+                        {idx + 1}
+                      </td>
+
+                      {/* 2. Mã Ticket ID */}
+                      <td 
+                        id={`support-cell-id-${msg.id}`}
+                        data-testid="support-cell-id"
+                        data-value={msg.id}
+                        className="py-3.5 px-3.5 whitespace-nowrap"
+                      >
+                        <span className="font-mono text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                          {msg.id}
+                        </span>
+                      </td>
+
+                      {/* 3. Họ và tên */}
+                      <td 
+                        id={`support-cell-fullname-${msg.id}`}
+                        data-testid="support-cell-fullname"
+                        data-value={msg.fullName}
+                        className="py-3.5 px-3.5 font-bold text-slate-900 dark:text-white whitespace-nowrap"
+                      >
+                        <span className="support-fullname-text">{msg.fullName}</span>
+                        {msg.userRole && (
+                          <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                            {msg.userRole}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 4. Email */}
+                      <td 
+                        id={`support-cell-email-${msg.id}`}
+                        data-testid="support-cell-email"
+                        data-value={msg.email}
+                        className="py-3.5 px-3.5 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap"
+                      >
+                        <span className="support-email-text">{msg.email}</span>
+                      </td>
+
+                      {/* 5. Chủ đề */}
+                      <td 
+                        id={`support-cell-subject-${msg.id}`}
+                        data-testid="support-cell-subject"
+                        data-value={msg.subject}
+                        className="py-3.5 px-3.5 font-medium text-slate-800 dark:text-slate-200 max-w-[220px]"
+                        title={msg.subject}
+                      >
+                        <span className="support-subject-text line-clamp-2">{msg.subject}</span>
+                      </td>
+
+                      {/* 6. Nội dung */}
+                      <td 
+                        id={`support-cell-message-${msg.id}`}
+                        data-testid="support-cell-message"
+                        data-value={msg.message}
+                        className="py-3.5 px-3.5 text-slate-600 dark:text-slate-300 max-w-[280px]"
+                        title={msg.message}
+                      >
+                        <span className="support-message-text line-clamp-2 leading-relaxed whitespace-pre-line">{msg.message}</span>
+                      </td>
+
+                      {/* 7. Trạng thái */}
+                      <td 
+                        id={`support-cell-status-${msg.id}`}
+                        data-testid="support-cell-status"
+                        data-value={msg.status}
+                        className="py-3.5 px-3.5 whitespace-nowrap"
+                      >
+                        {/* Hidden text for direct Selenium assertion */}
+                        <span className="sr-only support-status-raw" data-testid={`support-status-text-${msg.id}`}>
+                          {msg.status}
+                        </span>
+                        
+                        <select
+                          id={`support-select-status-${msg.id}`}
+                          data-testid={`support-select-status-${msg.id}`}
+                          aria-label={`Trạng thái tin nhắn ${msg.id}`}
+                          value={msg.status}
+                          onChange={(e) => handleUpdateSupportStatus(msg.id, e.target.value as any)}
+                          className={`text-xs font-bold px-2.5 py-1 rounded-lg border outline-none cursor-pointer transition-colors ${
+                            msg.status === 'NEW' 
+                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800' 
+                              : msg.status === 'IN_PROGRESS'
+                              ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                          }`}
+                        >
+                          <option value="NEW">🟡 Mới</option>
+                          <option value="IN_PROGRESS">🔵 Đang xử lý</option>
+                          <option value="RESOLVED">🟢 Đã giải quyết</option>
+                        </select>
+                      </td>
+
+                      {/* 8. Thời gian gửi */}
+                      <td 
+                        id={`support-cell-created-${msg.id}`}
+                        data-testid="support-cell-created"
+                        data-value={msg.createdAt}
+                        className="py-3.5 px-3.5 whitespace-nowrap font-mono text-[11px] text-slate-500"
+                      >
                         {new Date(msg.createdAt).toLocaleString('vi-VN')}
+                      </td>
+
+                      {/* 9. Hành động */}
+                      <td 
+                        id={`support-cell-actions-${msg.id}`}
+                        data-testid="support-cell-actions"
+                        className="py-3.5 px-3 text-center whitespace-nowrap"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            id={`support-btn-view-${msg.id}`}
+                            data-testid={`support-btn-view-${msg.id}`}
+                            onClick={() => setSelectedSupportMessage(msg)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 cursor-pointer transition-colors"
+                            title="Xem toàn bộ nội dung"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+
+                          <a
+                            id={`support-btn-reply-${msg.id}`}
+                            data-testid={`support-btn-reply-${msg.id}`}
+                            href={`mailto:${msg.email}?subject=Phản hồi hỗ trợ [${msg.id}]: ${encodeURIComponent(msg.subject)}`}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 cursor-pointer transition-colors"
+                            title="Soạn email phản hồi"
+                          >
+                            <Mail className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Table Footer with Summary */}
+              <div className="p-3 bg-slate-50/70 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
+                <span id="support-table-count" data-testid="support-table-count">
+                  Hiển thị <strong>{filteredSupportMessages.length}</strong> / <strong>{totalSupportCount}</strong> bản ghi
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Modal Xem chi tiết tin nhắn hỗ trợ (Phục vụ kiểm thử sâu hoặc xem nội dung dài) */}
+          {selectedSupportMessage && (
+            <div 
+              id="support-detail-modal-overlay" 
+              data-testid="support-detail-modal-overlay"
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+            >
+              <div 
+                id="support-detail-modal" 
+                data-testid="support-detail-modal"
+                className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-xl w-full shadow-2xl overflow-hidden animate-in zoom-in-95"
+              >
+                <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center">
+                      <Headphones className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                        Chi tiết yêu cầu hỗ trợ
+                      </h3>
+                      <p className="font-mono text-[11px] text-emerald-600">
+                        {selectedSupportMessage.id}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    id="support-modal-btn-close"
+                    data-testid="support-modal-btn-close"
+                    onClick={() => setSelectedSupportMessage(null)}
+                    className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto text-xs">
+                  <div className="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-800">
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Họ và tên</span>
+                      <span id="modal-detail-fullname" data-testid="modal-detail-fullname" className="font-bold text-slate-900 dark:text-white">
+                        {selectedSupportMessage.fullName}
                       </span>
-                      {/* Status toggle selector */}
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Email</span>
+                      <span id="modal-detail-email" data-testid="modal-detail-email" className="font-mono text-slate-700 dark:text-slate-300">
+                        {selectedSupportMessage.email}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Thời gian gửi</span>
+                      <span id="modal-detail-created" data-testid="modal-detail-created" className="font-mono text-slate-600 dark:text-slate-400">
+                        {new Date(selectedSupportMessage.createdAt).toLocaleString('vi-VN')}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Trạng thái</span>
+                      <span id="modal-detail-status" data-testid="modal-detail-status" className="font-bold text-slate-700 dark:text-slate-300">
+                        {selectedSupportMessage.status === 'NEW' ? '🟡 Mới' : selectedSupportMessage.status === 'IN_PROGRESS' ? '🔵 Đang xử lý' : '🟢 Đã giải quyết'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Chủ đề</label>
+                    <div id="modal-detail-subject" data-testid="modal-detail-subject" className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl font-bold text-slate-900 dark:text-white border border-slate-100 dark:border-slate-800">
+                      {selectedSupportMessage.subject}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Nội dung chi tiết</label>
+                    <div id="modal-detail-message" data-testid="modal-detail-message" className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl text-slate-800 dark:text-slate-200 border border-slate-100 dark:border-slate-800 whitespace-pre-wrap leading-relaxed">
+                      {selectedSupportMessage.message}
+                    </div>
+                  </div>
+
+                  {/* Status update in Modal */}
+                  <div className="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-500 font-medium">Thay đổi trạng thái:</span>
                       <select
-                        value={msg.status}
-                        onChange={(e) => handleUpdateSupportStatus(msg.id, e.target.value as any)}
-                        className={`text-xs font-bold px-2.5 py-1 rounded-lg border outline-none cursor-pointer ${
-                          msg.status === 'NEW' 
-                            ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800' 
-                            : msg.status === 'IN_PROGRESS'
-                            ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800'
-                            : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
-                        }`}
+                        id="modal-detail-select-status"
+                        data-testid="modal-detail-select-status"
+                        value={selectedSupportMessage.status}
+                        onChange={(e) => {
+                          const newStatus = e.target.value as any;
+                          handleUpdateSupportStatus(selectedSupportMessage.id, newStatus);
+                          setSelectedSupportMessage(prev => prev ? { ...prev, status: newStatus } : null);
+                        }}
+                        className="px-2.5 py-1 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none cursor-pointer"
                       >
                         <option value="NEW">🟡 Mới</option>
                         <option value="IN_PROGRESS">🔵 Đang xử lý</option>
                         <option value="RESOLVED">🟢 Đã giải quyết</option>
                       </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleDeleteSupportMessage(msg.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer transition-colors"
-                        title="Xóa tin nhắn này khỏi Firebase Firestore"
+                        id="modal-detail-btn-close-bottom"
+                        data-testid="modal-detail-btn-close-bottom"
+                        onClick={() => setSelectedSupportMessage(null)}
+                        className="px-4 py-1.5 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 cursor-pointer transition-colors"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        Đóng
                       </button>
                     </div>
                   </div>
-
-                  <div>
-                    <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                      📌 Chủ đề: {msg.subject}
-                    </span>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 whitespace-pre-wrap bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800 leading-relaxed font-sans">
-                      {msg.message}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
-                    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
-                      ✓ Đã lưu trữ trong Firestore collection: supportMessages
-                    </span>
-                    <a
-                      href={`mailto:${msg.email}?subject=Phản hồi hỗ trợ [${msg.id.replace('msg_', 'TK-').toUpperCase()}]: ${encodeURIComponent(msg.subject)}`}
-                      className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline inline-flex items-center gap-1"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span>Gửi email phản hồi</span>
-                    </a>
-                  </div>
                 </div>
-              ))}
+              </div>
             </div>
           )}
+
         </div>
       )}
 

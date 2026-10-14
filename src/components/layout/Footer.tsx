@@ -148,6 +148,8 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
             </p>
             <div className="flex items-center gap-4 text-[11px]">
               <button
+                id="footer-btn-support"
+                data-testid="footer-btn-support"
                 onClick={() => setIsSupportOpen(true)}
                 className="hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer font-medium flex items-center gap-1.5"
               >

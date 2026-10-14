@@ -227,6 +227,8 @@ export const SupportContactModal: React.FC<SupportContactModalProps> = ({
             </div>
           </div>
           <button
+            id="support-btn-close-modal"
+            data-testid="support-btn-close-modal"
             onClick={onClose}
             className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             title="Đóng cửa sổ"
@@ -239,23 +241,25 @@ export const SupportContactModal: React.FC<SupportContactModalProps> = ({
         <div className="p-6">
           {submitSuccess ? (
             /* Success State Confirmation */
-            <div className="text-center py-6 space-y-4 animate-in zoom-in-95">
+            <div className="text-center py-6 space-y-4 animate-in zoom-in-95" data-testid="support-success-container">
               <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
                 <CheckCircle2 className="w-9 h-9" />
               </div>
               <div className="space-y-3 max-w-md mx-auto">
-                <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                <h3 className="text-lg font-black text-slate-900 dark:text-white" data-testid="support-success-title">
                   Đã gửi yêu cầu hỗ trợ thành công!
                 </h3>
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
                   <span>Mã phiếu:</span>
-                  <span className="text-emerald-600 dark:text-emerald-400">{submitSuccess.ticketCode}</span>
+                  <span id="support-ticket-code" data-testid="support-ticket-code" className="text-emerald-600 dark:text-emerald-400">{submitSuccess.ticketCode}</span>
                 </div>
               </div>
 
               <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button
                   type="button"
+                  id="support-btn-reset-form"
+                  data-testid="support-btn-reset-form"
                   onClick={handleResetForm}
                   className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
                 >
@@ -263,6 +267,8 @@ export const SupportContactModal: React.FC<SupportContactModalProps> = ({
                 </button>
                 <button
                   type="button"
+                  id="support-btn-close-success"
+                  data-testid="support-btn-close-success"
                   onClick={onClose}
                   className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md cursor-pointer transition-transform active:scale-95"
                 >
@@ -310,6 +316,9 @@ export const SupportContactModal: React.FC<SupportContactModalProps> = ({
                   </div>
                   <input
                     type="text"
+                    id="support-input-fullname"
+                    name="fullName"
+                    data-testid="support-input-fullname"
                     value={fullName}
                     maxLength={50}
                     onChange={e => setFullName(e.target.value)}
@@ -343,6 +352,9 @@ export const SupportContactModal: React.FC<SupportContactModalProps> = ({
                   </div>
                   <input
                     type="email"
+                    id="support-input-email"
+                    name="email"
+                    data-testid="support-input-email"
                     value={email}
                     maxLength={100}
                     onChange={e => setEmail(e.target.value)}
@@ -377,6 +389,9 @@ export const SupportContactModal: React.FC<SupportContactModalProps> = ({
                 </div>
                 <input
                   type="text"
+                  id="support-input-subject"
+                  name="subject"
+                  data-testid="support-input-subject"
                   value={subject}
                   maxLength={100}
                   onChange={e => setSubject(e.target.value)}
@@ -429,6 +444,9 @@ export const SupportContactModal: React.FC<SupportContactModalProps> = ({
                 </div>
                 <textarea
                   rows={4}
+                  id="support-input-message"
+                  name="message"
+                  data-testid="support-input-message"
                   value={message}
                   maxLength={1000}
                   onChange={e => setMessage(e.target.value)}
@@ -459,6 +477,8 @@ export const SupportContactModal: React.FC<SupportContactModalProps> = ({
               {/* Submit Button */}
               <button
                 type="submit"
+                id="support-btn-submit"
+                data-testid="support-btn-submit"
                 disabled={!isFormValid || isSubmitting}
                 className="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
               >
