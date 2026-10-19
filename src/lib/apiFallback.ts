@@ -854,15 +854,44 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
       if (isFirebaseConfigured()) {
         const session = await getFirebaseGameSession(id);
         if (!session || session.isExpired) throw new Error('Không tìm thấy phòng thi đấu hoặc phòng đã hết hiệu lực');
+        const limit = session.questions?.[0]?.timeLimit || session.currentQuestion?.timeLimit || 20;
+        const nowMs = Date.now();
         const updated = await saveFirebaseGameSession({
           ...session,
           status: 'QUESTION_ACTIVE',
+          isQuestionLocked: false,
           currentQuestionIndex: 0,
           currentQuestion: session.questions?.[0] || session.currentQuestion,
+          questionStartedAt: nowMs,
+          questionEndTime: nowMs + limit * 1000,
+          timeLimit: limit,
+          updatedAt: new Date().toISOString(),
         });
         return makeJsonResponse({ success: true, data: updated, session: updated });
       }
       const session = dataStore.startGameRoom(id);
+      return makeJsonResponse({ success: true, data: session, session });
+    } catch (err: any) {
+      return makeJsonResponse({ success: false, error: { message: err.message } }, 400);
+    }
+  }
+
+  // Lock Question (Time's Up)
+  if (path.startsWith('/api/game/') && path.endsWith('/lock') && method === 'POST') {
+    const id = path.split('/')[3];
+    try {
+      if (isFirebaseConfigured()) {
+        const session = await getFirebaseGameSession(id);
+        if (!session) throw new Error('Không tìm thấy phòng thi đấu');
+        const updated = await saveFirebaseGameSession({
+          ...session,
+          isQuestionLocked: true,
+          questionEndTime: Date.now(),
+          updatedAt: new Date().toISOString(),
+        });
+        return makeJsonResponse({ success: true, data: updated, session: updated });
+      }
+      const session = dataStore.lockRoomQuestion(id);
       return makeJsonResponse({ success: true, data: session, session });
     } catch (err: any) {
       return makeJsonResponse({ success: false, error: { message: err.message } }, 400);
@@ -874,8 +903,13 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
     try {
       if (isFirebaseConfigured()) {
         const session = await getFirebaseGameSession(id);
-        const question = session?.questions?.[session.currentQuestionIndex] || session?.currentQuestion;
-        if (!session || !question) throw new Error('Không tìm thấy câu hỏi hiện tại');
+        const now = Date.now();
+        const isTimeExpired = !!(session?.questionEndTime && now > (session.questionEndTime + 500));
+        if (!session || session.status !== 'QUESTION_ACTIVE' || session.isQuestionLocked || isTimeExpired) {
+          throw new Error('Đã hết thời gian trả lời câu hỏi này');
+        }
+        const question = session.questions?.[session.currentQuestionIndex] || session.currentQuestion;
+        if (!question) throw new Error('Không tìm thấy câu hỏi hiện tại');
         const player = session.players.find(item => item.id === body.playerId);
         if (!player) throw new Error('Không tìm thấy người chơi trong phòng');
         const answerKey = question.id || `q_${session.currentQuestionIndex}`;
@@ -919,13 +953,21 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
         if (!session) throw new Error('Không tìm thấy phòng thi đấu');
         const showingLeaderboard = session.status === 'QUESTION_ACTIVE';
         const nextIndex = session.currentQuestionIndex + 1;
-        const finished = !showingLeaderboard && nextIndex >= session.totalQuestions;
+        const finished = !showingLeaderboard && nextIndex >= (session.totalQuestions || session.questions?.length || 0);
+        const nextStatus = finished ? 'FINISHED' : showingLeaderboard ? 'LEADERBOARD' : 'QUESTION_ACTIVE';
+        const nextLimit = (!finished && !showingLeaderboard) ? (session.questions?.[nextIndex]?.timeLimit || 20) : 20;
+        const nowMs = Date.now();
         const updated = await saveFirebaseGameSession({
           ...session,
-          status: finished ? 'FINISHED' : showingLeaderboard ? 'LEADERBOARD' : 'QUESTION_ACTIVE',
+          status: nextStatus,
+          isQuestionLocked: nextStatus !== 'QUESTION_ACTIVE',
           currentQuestionIndex: showingLeaderboard ? session.currentQuestionIndex : nextIndex,
           currentQuestion: finished ? undefined : showingLeaderboard ? session.currentQuestion : session.questions?.[nextIndex],
           isExpired: finished,
+          questionStartedAt: nextStatus === 'QUESTION_ACTIVE' ? nowMs : undefined,
+          questionEndTime: nextStatus === 'QUESTION_ACTIVE' ? nowMs + nextLimit * 1000 : undefined,
+          timeLimit: nextLimit,
+          updatedAt: new Date().toISOString(),
         });
         return makeJsonResponse({ success: true, data: updated, session: updated });
       }

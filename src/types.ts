@@ -124,6 +124,10 @@ export interface GameSession {
   isExpired?: boolean;
   questions?: Question[];
   currentQuestion?: Question;
+  isQuestionLocked?: boolean;
+  questionStartedAt?: number;
+  questionEndTime?: number;
+  timeLimit?: number;
 }
 
 export type MultiplayerGameState = 'WAITING' | 'QUESTION' | 'RESULTS' | 'FINISHED';

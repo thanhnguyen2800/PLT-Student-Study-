@@ -933,32 +933,87 @@ class DataStore {
     return { session, player: newPlayer };
   }
 
-  public startGameRoom(pin: string): GameSession {
-    const session = this.activeRooms.get(pin);
+  public startGameRoom(pinOrId: string): GameSession {
+    let session = this.activeRooms.get(pinOrId);
+    if (!session) {
+      for (const s of this.activeRooms.values()) {
+        if (s.pin === pinOrId || s.id === pinOrId) {
+          session = s;
+          break;
+        }
+      }
+    }
     if (!session || session.isExpired) throw new Error('Không tìm thấy phòng thi đấu hoặc phòng đã hết hiệu lực');
 
     const quiz = this.quizzes.get(session.quizId);
     session.status = 'QUESTION_ACTIVE';
+    session.isQuestionLocked = false;
     session.currentQuestionIndex = 0;
     if (quiz && quiz.questions && quiz.questions.length > 0) {
       session.questions = quiz.questions;
       session.currentQuestion = quiz.questions[0];
     }
+    const currentQ = session.currentQuestion || (quiz?.questions?.[0]);
+    const timeLimit = currentQ?.timeLimit || 20;
+    const nowMs = Date.now();
+    session.questionStartedAt = nowMs;
+    session.questionEndTime = nowMs + timeLimit * 1000;
+    session.timeLimit = timeLimit;
+
     session.updatedAt = new Date().toISOString();
-    this.activeRooms.set(pin, session);
+    this.activeRooms.set(session.pin, session);
+    this.activeRooms.set(session.id, session);
+    this.saveActiveRooms();
+    return session;
+  }
+
+  public lockRoomQuestion(pinOrId: string): GameSession {
+    let session = this.activeRooms.get(pinOrId);
+    if (!session) {
+      for (const s of this.activeRooms.values()) {
+        if (s.pin === pinOrId || s.id === pinOrId) {
+          session = s;
+          break;
+        }
+      }
+    }
+    if (!session) throw new Error('Không tìm thấy phòng thi đấu');
+    session.isQuestionLocked = true;
+    session.questionEndTime = Date.now();
+    session.updatedAt = new Date().toISOString();
+    this.activeRooms.set(session.pin, session);
+    this.activeRooms.set(session.id, session);
     this.saveActiveRooms();
     return session;
   }
 
   public submitRoomAnswer(
-    pin: string, 
+    pinOrId: string, 
     playerId: string, 
     questionId: string, 
     answer: any, 
     timeTaken: number = 5
   ): { isCorrect: boolean; points: number; session: GameSession } {
-    const session = this.activeRooms.get(pin);
+    let session = this.activeRooms.get(pinOrId);
+    if (!session) {
+      for (const s of this.activeRooms.values()) {
+        if (s.pin === pinOrId || s.id === pinOrId) {
+          session = s;
+          break;
+        }
+      }
+    }
     if (!session) throw new Error('Không tìm thấy phòng thi đấu');
+
+    const now = Date.now();
+    const isExpired = !!(session.questionEndTime && now > (session.questionEndTime + 500));
+    if (session.status !== 'QUESTION_ACTIVE' || session.isQuestionLocked || isExpired) {
+      session.isQuestionLocked = true;
+      this.activeRooms.set(session.pin, session);
+      this.activeRooms.set(session.id, session);
+      this.saveActiveRooms();
+      throw new Error('Đã hết thời gian trả lời câu hỏi này');
+    }
     const quiz = this.quizzes.get(session.quizId);
     if (!quiz) throw new Error('Không tìm thấy dữ liệu Quiz');
 
@@ -988,7 +1043,7 @@ class DataStore {
       isCorrect = Number(currentQ.correctAnswer) === Number(answer);
     }
 
-    const timeLimit = currentQ.timeLimit || 20;
+    const timeLimit = currentQ.timeLimit || session.timeLimit || 20;
     const timeRatio = Math.max(0, 1 - (timeTaken / timeLimit));
     const basePoints = currentQ.points || 1000;
     let pointsEarned = 0;
@@ -1019,36 +1074,54 @@ class DataStore {
     };
 
     session.updatedAt = new Date().toISOString();
-    this.activeRooms.set(pin, session);
+    this.activeRooms.set(session.pin, session);
+    this.activeRooms.set(session.id, session);
     this.saveActiveRooms();
 
     return { isCorrect, points: pointsEarned, session };
   }
 
-  public nextRoomQuestion(pin: string): GameSession {
-    const session = this.activeRooms.get(pin);
+  public nextRoomQuestion(pinOrId: string): GameSession {
+    let session = this.activeRooms.get(pinOrId);
+    if (!session) {
+      for (const s of this.activeRooms.values()) {
+        if (s.pin === pinOrId || s.id === pinOrId) {
+          session = s;
+          break;
+        }
+      }
+    }
     if (!session) throw new Error('Không tìm thấy phòng thi đấu');
     const quiz = this.quizzes.get(session.quizId);
     if (!quiz) throw new Error('Không tìm thấy Quiz');
 
     if (session.status === 'QUESTION_ACTIVE') {
       session.status = 'LEADERBOARD';
+      session.isQuestionLocked = true;
     } else if (session.status === 'LEADERBOARD') {
       const nextIndex = session.currentQuestionIndex + 1;
       if (nextIndex >= quiz.questions.length) {
         session.status = 'FINISHED';
         session.isExpired = true; // Expire PIN once all questions finished
         session.currentQuestion = undefined;
+        session.isQuestionLocked = true;
         this.saveFinishedRoomAsResult(session);
       } else {
         session.currentQuestionIndex = nextIndex;
         session.status = 'QUESTION_ACTIVE';
+        session.isQuestionLocked = false;
         session.currentQuestion = quiz.questions[nextIndex];
+        const timeLimit = quiz.questions[nextIndex]?.timeLimit || 20;
+        const nowMs = Date.now();
+        session.questionStartedAt = nowMs;
+        session.questionEndTime = nowMs + timeLimit * 1000;
+        session.timeLimit = timeLimit;
       }
     }
 
     session.updatedAt = new Date().toISOString();
-    this.activeRooms.set(pin, session);
+    this.activeRooms.set(session.pin, session);
+    this.activeRooms.set(session.id, session);
     this.saveActiveRooms();
     return session;
   }

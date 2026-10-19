@@ -1287,6 +1287,25 @@ const handleSubmitAnswer = async (req: express.Request, res: express.Response) =
 app.post('/api/game/:pin/answer', handleSubmitAnswer);
 app.post('/api/realtime/games/:pin/answer', handleSubmitAnswer);
 
+// 5.1 Lock Question (Time's Up)
+const handleLockQuestion = async (req: express.Request, res: express.Response) => {
+  try {
+    const pin = req.params.pin || req.params.id;
+    const session = dataStore.lockRoomQuestion(pin);
+
+    // Sync to Cloud Firestore
+    saveGameSessionToFirestore(session).catch(e => {
+      console.warn('[Firestore] Async sync lock question failed:', e);
+    });
+
+    res.json({ success: true, data: session });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: { message: err.message } });
+  }
+};
+app.post('/api/game/:pin/lock', handleLockQuestion);
+app.post('/api/realtime/games/:pin/lock', handleLockQuestion);
+
 // 6. Next Question / Leaderboard / Finish
 const handleNextQuestion = async (req: express.Request, res: express.Response) => {
   try {

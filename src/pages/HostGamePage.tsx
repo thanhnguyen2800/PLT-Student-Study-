@@ -17,7 +17,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { GameSession, Quiz } from '../types';
 import { speakText } from '../utils/tts';
 import { useAuth } from '../context/AuthContext';
@@ -153,12 +153,31 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
 
   const handleStartGame = async () => {
     if (!session) return;
+    const roomId = session.pin || session.id;
     try {
-      const res = await fetch(`/api/game/${session.id}/start`, { method: 'POST' });
+      const res = await fetch(`/api/game/${roomId}/start`, { method: 'POST' });
       const json = await res.json();
       if (json.success) {
-        setSession(json.data);
-        setTimeLeft(quiz?.questions[0]?.timeLimit || 20);
+        const nextSession = json.data;
+        const limit = quiz?.questions[0]?.timeLimit || 20;
+        const nowMs = Date.now();
+        setSession(nextSession);
+        setTimeLeft(limit);
+        setShowExplanation(false);
+
+        // Instant broadcast to Firestore
+        const db = getClientFirestore();
+        if (db) {
+          updateDoc(doc(db, 'gameSessions', roomId), {
+            status: 'QUESTION_ACTIVE',
+            isQuestionLocked: false,
+            currentQuestionIndex: 0,
+            questionStartedAt: nowMs,
+            questionEndTime: nowMs + limit * 1000,
+            timeLimit: limit,
+            updatedAt: new Date().toISOString(),
+          }).catch(console.warn);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -167,17 +186,35 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
 
   const handleNextQuestion = async () => {
     if (!session) return;
+    const roomId = session.pin || session.id;
     setShowExplanation(false);
     try {
-      const res = await fetch(`/api/game/${session.id}/next`, { method: 'POST' });
+      const res = await fetch(`/api/game/${roomId}/next`, { method: 'POST' });
       const json = await res.json();
       if (json.success) {
-        setSession(json.data);
-        if (json.data.status === 'FINISHED') {
+        const nextSession = json.data;
+        setSession(nextSession);
+        if (nextSession.status === 'FINISHED') {
           confetti({ particleCount: 100, spread: 80, origin: { y: 0.5 } });
-        } else {
-          const nextQ = quiz?.questions[json.data.currentQuestionIndex];
-          setTimeLeft(nextQ?.timeLimit || 20);
+        } else if (nextSession.status === 'QUESTION_ACTIVE') {
+          const nextQ = quiz?.questions[nextSession.currentQuestionIndex];
+          const limit = nextQ?.timeLimit || 20;
+          const nowMs = Date.now();
+          setTimeLeft(limit);
+
+          // Instant broadcast to Firestore
+          const db = getClientFirestore();
+          if (db) {
+            updateDoc(doc(db, 'gameSessions', roomId), {
+              status: 'QUESTION_ACTIVE',
+              isQuestionLocked: false,
+              currentQuestionIndex: nextSession.currentQuestionIndex,
+              questionStartedAt: nowMs,
+              questionEndTime: nowMs + limit * 1000,
+              timeLimit: limit,
+              updatedAt: new Date().toISOString(),
+            }).catch(console.warn);
+          }
         }
       }
     } catch (e) {
@@ -188,7 +225,7 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
   const handleEndSessionAndExit = async () => {
     if (session?.id) {
       try {
-        await fetch(`/api/game/${session.id}/end`, { method: 'POST' });
+        await fetch(`/api/game/${session.pin || session.id}/end`, { method: 'POST' });
       } catch (e) {
         console.warn('Could not end session:', e);
       }
@@ -196,21 +233,87 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
     onBack();
   };
 
-  // Timer tick for question
+  const handleLockQuestion = async () => {
+    if (!session?.id && !session?.pin) return;
+    const roomId = session.pin || session.id;
+    // Lock locally immediately
+    setSession(prev => prev ? { ...prev, isQuestionLocked: true, questionEndTime: Date.now() } : null);
+    try {
+      // 1. Direct real-time lock on Firestore for instant lock on players' screens
+      const db = getClientFirestore();
+      if (db) {
+        try {
+          await updateDoc(doc(db, 'gameSessions', roomId), {
+            isQuestionLocked: true,
+            questionEndTime: Date.now(),
+            updatedAt: new Date().toISOString(),
+          });
+        } catch (e) {
+          console.warn('[Firestore Live] Lock question note:', e);
+        }
+      }
+      // 2. Lock on backend / fallback API
+      await fetch(`/api/game/${roomId}/lock`, { method: 'POST' });
+    } catch (e) {
+      console.warn('Could not lock question:', e);
+    }
+  };
+
+  // Timer tick for question: strictly synchronized
   useEffect(() => {
     if (session?.status !== 'QUESTION_ACTIVE') return;
+
+    if (session?.isQuestionLocked) {
+      setTimeLeft(0);
+      setShowExplanation(true);
+      return;
+    }
+
+    const currentQ = quiz?.questions[session.currentQuestionIndex];
+    const initialLimit = currentQ?.timeLimit || 20;
+
+    const computeRemaining = () => {
+      if (session.isQuestionLocked) return 0;
+      if (session.questionEndTime) {
+        return Math.max(0, Math.ceil((session.questionEndTime - Date.now()) / 1000));
+      }
+      return null;
+    };
+
+    const initialRem = computeRemaining();
+    if (initialRem !== null) {
+      setTimeLeft(initialRem);
+      if (initialRem <= 0) {
+        setShowExplanation(true);
+        handleLockQuestion();
+        return;
+      }
+    } else {
+      setTimeLeft(initialLimit);
+    }
+
     const interval = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          // Time up: reveal answers
+      const rem = computeRemaining();
+      if (rem !== null) {
+        setTimeLeft(rem);
+        if (rem <= 0) {
           setShowExplanation(true);
-          return 0;
+          handleLockQuestion();
         }
-        return prev - 1;
-      });
-    }, 1000);
+      } else {
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            setShowExplanation(true);
+            handleLockQuestion();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }
+    }, 500);
+
     return () => clearInterval(interval);
-  }, [session?.status, session?.currentQuestionIndex]);
+  }, [session?.status, session?.currentQuestionIndex, session?.id, session?.isQuestionLocked, session?.questionEndTime]);
 
   if (!canHost) {
     return (
@@ -460,15 +563,19 @@ export const HostGamePage: React.FC<HostGameProps> = ({ quizId, onBack }) => {
         <div className="flex items-center justify-between pt-2">
           {!showExplanation ? (
             <button
-              onClick={() => setShowExplanation(true)}
-              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              onClick={() => {
+                setShowExplanation(true);
+                setTimeLeft(0);
+                handleLockQuestion();
+              }}
+              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
             >
-              Hiện đáp án ngay
+              Hiện đáp án ngay (Khóa câu hỏi)
             </button>
           ) : (
             <div className="text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4" />
-              Đã hiển thị đáp án đúng cho cả phòng
+              Đã khóa câu hỏi & hiển thị đáp án đúng
             </div>
           )}
 

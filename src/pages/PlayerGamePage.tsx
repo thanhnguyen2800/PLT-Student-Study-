@@ -155,9 +155,14 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
     return () => clearInterval(pollingRef.current);
   }, [joinedSession?.id, joinedSession?.currentQuestionIndex, joinedSession?.status, quiz]);
 
-  // Countdown timer when QUESTION_ACTIVE
+  // Strictly synchronized countdown timer when QUESTION_ACTIVE
   useEffect(() => {
     if (joinedSession?.status !== 'QUESTION_ACTIVE') return;
+
+    if (joinedSession?.isQuestionLocked) {
+      setTimeLeft(0);
+      return;
+    }
 
     const currentQ = 
       quiz?.questions?.[joinedSession.currentQuestionIndex] || 
@@ -165,14 +170,46 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
       joinedSession.questions?.[joinedSession.currentQuestionIndex];
 
     const initialLimit = currentQ?.timeLimit || 20;
-    setTimeLeft(initialLimit);
+
+    const computeRemaining = () => {
+      if (joinedSession?.isQuestionLocked) return 0;
+      if (joinedSession?.questionEndTime) {
+        return Math.max(0, Math.ceil((joinedSession.questionEndTime - Date.now()) / 1000));
+      }
+      return null;
+    };
+
+    const initialRem = computeRemaining();
+    if (initialRem !== null) {
+      setTimeLeft(initialRem);
+    } else {
+      setTimeLeft(initialLimit);
+    }
 
     const timer = setInterval(() => {
-      setTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
+      const rem = computeRemaining();
+      if (rem !== null) {
+        setTimeLeft(rem);
+      } else {
+        setTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
+      }
+    }, 400);
 
     return () => clearInterval(timer);
-  }, [joinedSession?.status, joinedSession?.currentQuestionIndex, quiz]);
+  }, [joinedSession?.status, joinedSession?.currentQuestionIndex, joinedSession?.isQuestionLocked, joinedSession?.questionEndTime, quiz]);
+
+  // Instantly sync time out if question is locked by host
+  useEffect(() => {
+    if (joinedSession?.isQuestionLocked) {
+      setTimeLeft(0);
+    }
+  }, [joinedSession?.isQuestionLocked]);
+
+  const isTimeUp = 
+    timeLeft <= 0 || 
+    !!joinedSession?.isQuestionLocked || 
+    (!!joinedSession?.questionEndTime && Date.now() >= joinedSession.questionEndTime);
+  const isAnswerDisabled = hasAnswered || isTimeUp;
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,14 +244,14 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
   };
 
   const togglePlayerMultipleOption = (optionIndex: number) => {
-    if (hasAnswered || !joinedSession) return;
+    if (isAnswerDisabled || !joinedSession) return;
     setSelectedMultiple(prev =>
       prev.includes(optionIndex) ? prev.filter(i => i !== optionIndex) : [...prev, optionIndex].sort((a, b) => a - b)
     );
   };
 
   const handleSubmitPlayerAnswer = async (answerVal: any) => {
-    if (hasAnswered || !joinedSession) return;
+    if (isAnswerDisabled || !joinedSession) return;
     setSelectedAnswer(answerVal);
     setHasAnswered(true);
 
@@ -227,7 +264,7 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
     const timeSpent = Math.max(1, timeLimit - timeLeft);
 
     try {
-      const res = await fetch(`/api/game/${joinedSession.id}/answer`, {
+      const res = await fetch(`/api/game/${joinedSession.pin || joinedSession.id}/answer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -244,6 +281,9 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
         if (json.data.isCorrect) {
           confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 } });
         }
+      } else if (!json.success && json.error?.message?.includes('hết thời gian')) {
+        setTimeLeft(0);
+        setJoinedSession(prev => prev ? { ...prev, isQuestionLocked: true } : null);
       }
     } catch (e) {
       console.error(e);
@@ -251,6 +291,7 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
   };
 
   const handleSelectOption = (optionIndex: number) => {
+    if (isAnswerDisabled) return;
     handleSubmitPlayerAnswer(optionIndex);
   };
 
@@ -662,12 +703,14 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
             )}
 
             <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-mono font-black text-xs sm:text-sm shadow-xs ${
-              timeLeft <= 5 
+              isTimeUp
+                ? 'bg-rose-100 dark:bg-rose-950 text-rose-600 font-bold'
+                : timeLeft <= 5 
                 ? 'bg-rose-100 dark:bg-rose-950 text-rose-600 animate-bounce' 
                 : 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400'
             }`}>
               <Clock className="w-4 h-4 text-current" />
-              <span>{timeLeft}s</span>
+              <span>{isTimeUp ? 'Hết giờ!' : `${timeLeft}s`}</span>
             </div>
           </div>
         </div>
@@ -704,6 +747,22 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
         {/* Answer Options: Prominent Cards with shapes AND full option text */}
         {!hasAnswered ? (
           <div className="space-y-3.5">
+            {isTimeUp && (
+              <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border-2 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 flex items-center gap-3 animate-in fade-in">
+                <div className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center shrink-0 shadow-md">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-black text-sm sm:text-base text-rose-700 dark:text-rose-300">
+                    ĐÃ HẾT THỜI GIAN LÀM BÀI!
+                  </h4>
+                  <p className="text-xs text-rose-600 dark:text-rose-400 mt-0.5">
+                    Thời gian trả lời câu hỏi này đã kết thúc. Bạn không thể chọn đáp án nữa. Đang chờ Host chuyển câu tiếp theo...
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               {kahootButtons.map((btn, idx) => {
                 const optionText = questionOptions[idx] !== undefined ? questionOptions[idx] : `Phương án ${btn.label}`;
@@ -713,14 +772,20 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
                   <button
                     key={idx}
                     type="button"
+                    disabled={isAnswerDisabled}
                     onClick={() => {
+                      if (isAnswerDisabled) return;
                       if (isMultipleSelect) {
                         togglePlayerMultipleOption(idx);
                       } else {
                         handleSelectOption(idx);
                       }
                     }}
-                    className={`rounded-2xl sm:rounded-3xl ${btn.color} text-white p-4 sm:p-5 flex items-center gap-3.5 sm:gap-4 shadow-lg transition-all duration-150 cursor-pointer text-left group ${
+                    className={`rounded-2xl sm:rounded-3xl ${btn.color} text-white p-4 sm:p-5 flex items-center gap-3.5 sm:gap-4 shadow-lg transition-all duration-150 text-left group ${
+                      isAnswerDisabled
+                        ? 'opacity-40 cursor-not-allowed pointer-events-none grayscale-[25%]'
+                        : 'cursor-pointer hover:scale-[1.01] active:scale-98'
+                    } ${
                       isSelected ? 'ring-4 ring-purple-400 dark:ring-purple-300 ring-offset-2 scale-[1.02] shadow-2xl' : ''
                     }`}
                   >
@@ -754,12 +819,14 @@ export const PlayerGamePage: React.FC<PlayerGameProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSubmitPlayerAnswer(selectedMultiple)}
-                  disabled={selectedMultiple.length === 0}
+                  disabled={selectedMultiple.length === 0 || isAnswerDisabled}
                   className="w-full py-4 px-6 rounded-2xl bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-base sm:text-lg flex items-center justify-center gap-2 shadow-xl shadow-purple-600/30 transition-all cursor-pointer"
                 >
                   <CheckCircle2 className="w-6 h-6" />
                   <span>
-                    {selectedMultiple.length > 0
+                    {isTimeUp
+                      ? 'Đã hết thời gian (Không thể gửi đáp án)'
+                      : selectedMultiple.length > 0
                       ? `Xác nhận gửi đáp án (Đã chọn ${selectedMultiple.length} phương án)`
                       : 'Vui lòng tích chọn các đáp án bạn cho là đúng'}
                   </span>
