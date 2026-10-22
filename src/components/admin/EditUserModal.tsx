@@ -16,7 +16,9 @@ import {
   Sparkles,
   Cloud,
   Eye,
-  EyeOff
+  EyeOff,
+  Key,
+  Copy
 } from 'lucide-react';
 import { User, UserRole, UserStatus } from '../../types';
 import { 
@@ -56,6 +58,8 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   const [changePassword, setChangePassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [copiedCurrentPassword, setCopiedCurrentPassword] = useState(false);
 
   // States
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -74,12 +78,16 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       setStatus(user.status || 'ACTIVE');
       setChangePassword(false);
       setNewPassword('');
+      setShowPassword(false);
+      setShowCurrentPassword(false);
+      setCopiedCurrentPassword(false);
       setFormError(null);
       setFormSuccess(null);
     }
   }, [user]);
 
   if (!isOpen || !user) return null;
+  if (currentUserRole === 'ADMIN' && user.role === 'SUPER_ADMIN') return null;
 
   const isSuperAdmin = currentUserRole === 'SUPER_ADMIN';
 
@@ -390,46 +398,105 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             </div>
           </div>
 
-          {/* Optional Password Update */}
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="admin-chk-password"
-                checked={changePassword}
-                onChange={e => {
-                  setChangePassword(e.target.checked);
-                  if (!e.target.checked) setNewPassword('');
-                }}
-                className="w-4 h-4 rounded-md text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-              />
-              <label htmlFor="admin-chk-password" className="text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
-                Đặt mật khẩu mới cho tài khoản này
-              </label>
+          {/* Mục Mật khẩu hiện tại để dễ quản lý */}
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+            <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
+                    <Key className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Mật khẩu hiện tại
+                    </label>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Mật khẩu đang kích hoạt cho tài khoản này
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="px-2 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                    title={showCurrentPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                  >
+                    {showCurrentPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                    <span>{showCurrentPassword ? 'Ẩn' : 'Xem'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const pwd = user.currentPassword || (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' ? 'Admin@123' : user.role === 'TEACHER' ? 'Teacher@123' : 'Student@123');
+                      navigator.clipboard.writeText(pwd);
+                      setCopiedCurrentPassword(true);
+                      setTimeout(() => setCopiedCurrentPassword(false), 2000);
+                    }}
+                    className="px-2 py-1 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
+                    title="Sao chép mật khẩu"
+                  >
+                    {copiedCurrentPassword ? <Check className="w-3 h-3 text-white" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedCurrentPassword ? 'Đã sao chép' : 'Sao chép'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/80 font-mono text-xs sm:text-sm font-bold text-slate-900 dark:text-white select-all">
+                <span>
+                  {showCurrentPassword 
+                    ? (user.currentPassword || (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' ? 'Admin@123' : user.role === 'TEACHER' ? 'Teacher@123' : 'Student@123')) 
+                    : '••••••••••••'}
+                </span>
+                <span className="text-[10px] font-sans font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Đang hoạt động
+                </span>
+              </div>
             </div>
 
-            {changePassword && (
-              <div className="relative">
-                <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            {/* Optional Password Update */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center gap-2">
                 <input
-                  type={showPassword ? 'text' : 'password'}
-                  required={changePassword}
-                  value={newPassword}
-                  minLength={6}
-                  maxLength={32}
-                  onChange={e => setNewPassword(e.target.value)}
-                  placeholder="Mật khẩu mới (Tối thiểu 6 ký tự)..."
-                  className="w-full pl-9 pr-9 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                  type="checkbox"
+                  id="admin-chk-password"
+                  checked={changePassword}
+                  onChange={e => {
+                    setChangePassword(e.target.checked);
+                    if (!e.target.checked) setNewPassword('');
+                  }}
+                  className="w-4 h-4 rounded-md text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-                >
-                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
+                <label htmlFor="admin-chk-password" className="text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                  Đặt mật khẩu mới cho tài khoản này
+                </label>
               </div>
-            )}
+
+              {changePassword && (
+                <div className="relative animate-in fade-in">
+                  <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required={changePassword}
+                    value={newPassword}
+                    minLength={6}
+                    maxLength={32}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="Mật khẩu mới (Tối thiểu 6 ký tự)..."
+                    className="w-full pl-9 pr-9 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Footer actions */}

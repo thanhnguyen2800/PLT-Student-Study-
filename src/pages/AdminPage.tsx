@@ -26,7 +26,9 @@ import {
   RefreshCw,
   Filter,
   X,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ShieldAlert,
+  Key
 } from 'lucide-react';
 import { User, UserRole, UserStatus, AuditLog, SupportMessage } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -287,10 +289,12 @@ export const AdminPage: React.FC = () => {
     return (
       <div className="py-20 text-center space-y-3">
         <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
-          <ShieldCheck className="w-6 h-6" />
+          <ShieldAlert className="w-6 h-6" />
         </div>
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">Truy cập bị từ chối (403 Forbidden)</h2>
-        <p className="text-xs text-slate-500">Khu vực này chỉ dành riêng cho Ban Quản Trị Hệ Thống.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+          Khu vực này chỉ dành riêng cho Ban Quản Trị Hệ Thống. Tài khoản Học viên (Student) và Giảng viên (Teacher) không có quyền truy cập vào mục Quản trị.
+        </p>
       </div>
     );
   }
@@ -335,6 +339,10 @@ export const AdminPage: React.FC = () => {
   };
 
   const handleToggleStatus = async (user: User) => {
+    if (currentUser?.uid === user.uid) {
+      setActionFeedback({ type: 'error', message: 'Bạn không thể tự khóa tài khoản của chính mình.' });
+      return;
+    }
     const nextStatus: UserStatus = user.status === 'ACTIVE' ? 'LOCKED' : 'ACTIVE';
     setActionLoadingUid(user.uid);
     setActionFeedback(null);
@@ -390,6 +398,10 @@ export const AdminPage: React.FC = () => {
   };
 
   const handleDeleteUser = (user: User) => {
+    if (currentUser?.uid === user.uid) {
+      setActionFeedback({ type: 'error', message: 'Bạn không thể tự xóa tài khoản của chính mình.' });
+      return;
+    }
     setConfirmDeleteUser(user);
   };
 
@@ -587,8 +599,6 @@ export const AdminPage: React.FC = () => {
 
   const canManageUser = (user: User) => {
     if (!currentUser) return false;
-    const isSelf = currentUser.uid === user.uid || (currentUser.email && user.email && currentUser.email.toLowerCase() === user.email.toLowerCase());
-    if (isSelf) return false;
     const actorRole = (currentUser.role || '').toUpperCase();
     const targetRole = (user.role || '').toUpperCase();
     if (actorRole === 'SUPER_ADMIN') return true;
@@ -808,7 +818,7 @@ export const AdminPage: React.FC = () => {
                               />
                               <div>
                                 <p className="font-bold text-slate-900 dark:text-white">{user.displayName || 'Chưa đặt tên'}</p>
-                                <p className="text-[11px] text-slate-400 font-mono">{user.email}</p>
+                                <p className="text-[11px] text-slate-400 font-mono mt-0.5">{user.email}</p>
                               </div>
                             </div>
                           </td>
@@ -851,7 +861,7 @@ export const AdminPage: React.FC = () => {
                                     id={`btn-edit-user-${user.uid}`}
                                     onClick={() => setEditingUser(user)}
                                     disabled={actionLoadingUid === user.uid}
-                                    title="Chỉnh sửa thông tin và mật khẩu học viên / giảng viên"
+                                    title="Chỉnh sửa thông tin và mật khẩu tài khoản"
                                     className="px-2.5 py-1.5 rounded-lg border border-sky-200 text-sky-700 bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/40 dark:border-sky-800 dark:text-sky-400 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50"
                                   >
                                     <Edit className="w-3.5 h-3.5" />
@@ -861,9 +871,9 @@ export const AdminPage: React.FC = () => {
                                     type="button"
                                     id={`btn-toggle-status-${user.uid}`}
                                     onClick={() => handleToggleStatus(user)}
-                                    disabled={actionLoadingUid === user.uid}
-                                    title={user.status === 'ACTIVE' ? 'Khóa tài khoản này' : 'Kích hoạt lại tài khoản này'}
-                                    className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50 ${
+                                    disabled={actionLoadingUid === user.uid || currentUser?.uid === user.uid}
+                                    title={currentUser?.uid === user.uid ? "Không thể tự khóa tài khoản của chính mình" : (user.status === 'ACTIVE' ? 'Khóa tài khoản này' : 'Kích hoạt lại tài khoản này')}
+                                    className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-40 disabled:cursor-not-allowed ${
                                       user.status === 'ACTIVE'
                                         ? 'border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-400'
                                         : 'border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400'
@@ -885,9 +895,9 @@ export const AdminPage: React.FC = () => {
                                     type="button"
                                     id={`btn-delete-user-${user.uid}`}
                                     onClick={() => handleDeleteUser(user)}
-                                    disabled={actionLoadingUid === user.uid}
-                                    title="Xóa vĩnh viễn tài khoản khỏi Firebase và hệ thống"
-                                    className="px-2.5 py-1.5 rounded-lg border border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-400 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-50"
+                                    disabled={actionLoadingUid === user.uid || currentUser?.uid === user.uid}
+                                    title={currentUser?.uid === user.uid ? "Không thể tự xóa tài khoản của chính mình" : "Xóa vĩnh viễn tài khoản khỏi Firebase và hệ thống"}
+                                    className="px-2.5 py-1.5 rounded-lg border border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-400 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                     <span>Xóa</span>
@@ -895,9 +905,7 @@ export const AdminPage: React.FC = () => {
                                 </>
                               ) : (
                                 <span className="text-[11px] text-slate-400 dark:text-slate-500 italic px-2 py-1">
-                                  {currentUser?.uid === user.uid || (currentUser?.email && user.email && currentUser.email.toLowerCase() === user.email.toLowerCase())
-                                    ? '(Chính bạn)'
-                                    : '--'}
+                                  {user.role === 'SUPER_ADMIN' ? '👑 Cấp tối cao' : '--'}
                                 </span>
                               )}
                             </div>

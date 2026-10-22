@@ -89,8 +89,10 @@ class DataStore {
     // Fallback to initial seeds
     if (loadedUsers.length === 0) {
       INITIAL_USERS.forEach(u => {
+        const defaultPwd = u.currentPassword || (u.role === 'SUPER_ADMIN' || u.role === 'ADMIN' ? 'Admin@123' : u.role === 'TEACHER' ? 'Teacher@123' : 'Student@123');
+        u.currentPassword = defaultPwd;
         this.users.set(u.uid, u);
-        this.userPasswords.set(u.email.toLowerCase(), 'Admin@123'); // Default password for initial accounts
+        this.userPasswords.set(u.email.toLowerCase(), defaultPwd);
       });
       this.saveUsers();
     } else {
@@ -98,8 +100,10 @@ class DataStore {
         if (u.createdAt && u.createdAt.includes('2025')) {
           u.createdAt = '2026-10-01T00:00:00.000Z';
         }
+        const defaultPwd = u.currentPassword || this.userPasswords.get(u.email.toLowerCase()) || (u.role === 'SUPER_ADMIN' || u.role === 'ADMIN' ? 'Admin@123' : u.role === 'TEACHER' ? 'Teacher@123' : 'Student@123');
+        u.currentPassword = defaultPwd;
         this.users.set(u.uid, u);
-        this.userPasswords.set(u.email.toLowerCase(), 'Admin@123');
+        this.userPasswords.set(u.email.toLowerCase(), defaultPwd);
       });
     }
 
@@ -222,6 +226,10 @@ class DataStore {
   }
 
   public getUserPassword(email: string): string | null {
+    const user = this.getUserByEmail(email);
+    if (user && user.currentPassword) {
+      return user.currentPassword;
+    }
     return this.userPasswords.get(email.toLowerCase()) || null;
   }
 
@@ -232,22 +240,12 @@ class DataStore {
       throw new Error('Tài khoản của bạn đã bị khóa bởi Quản trị viên');
     }
     
-    // Check password flexibly for testing and production
-    const storedPwd = this.userPasswords.get(user.email.toLowerCase()) || 'Admin@123';
+    // Check password against active user password
+    const roleDefault = (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') ? 'Admin@123' : user.role === 'TEACHER' ? 'Teacher@123' : 'Student@123';
+    const storedPwd = user.currentPassword || this.userPasswords.get(user.email.toLowerCase()) || roleDefault;
     const pwd = (passwordAttempt || '').trim();
-    const validPasswords = [
-      storedPwd,
-      'Admin@123',
-      'Student@123',
-      'Teacher@123',
-      'admin123',
-      'teacher123',
-      'student123',
-      '123456',
-      'password',
-    ];
 
-    if (!validPasswords.includes(pwd) && pwd.toLowerCase() !== storedPwd.toLowerCase()) {
+    if (pwd !== storedPwd && pwd.toLowerCase() !== storedPwd.toLowerCase()) {
       return null;
     }
 
@@ -278,6 +276,7 @@ class DataStore {
       this.userPasswords.delete(existing.email.toLowerCase());
     }
 
+    const cleanPwd = (data.password || (data.role === 'SUPER_ADMIN' || data.role === 'ADMIN' ? 'Admin@123' : data.role === 'TEACHER' ? 'Teacher@123' : 'Student@123')).trim();
     const uid = 'usr_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
     const newUser: UserProfile = {
       uid,
@@ -291,12 +290,11 @@ class DataStore {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       createdBy: data.createdBy || 'ADMIN',
+      currentPassword: cleanPwd,
     };
 
     this.users.set(uid, newUser);
-    if (data.password) {
-      this.userPasswords.set(data.email.toLowerCase(), data.password);
-    }
+    this.userPasswords.set(data.email.toLowerCase(), cleanPwd);
     this.saveUsers();
 
     this.logAction({
@@ -317,15 +315,15 @@ class DataStore {
   }
 
   public addUser(user: UserProfile, password?: string): UserProfile {
+    const cleanPwd = password || user.currentPassword || this.userPasswords.get(user.email.toLowerCase()) || '123456';
+    user.currentPassword = cleanPwd;
     this.users.set(user.uid, user);
-    if (password) {
-      this.userPasswords.set(user.email.toLowerCase(), password);
-    }
+    this.userPasswords.set(user.email.toLowerCase(), cleanPwd);
     this.saveUsers();
     return user;
   }
 
-  public updateUser(uid: string, updates: Partial<UserProfile> & { password?: string }, actorUid?: string): UserProfile {
+  public updateUser(uid: string, updates: Partial<UserProfile> & { password?: string; currentPassword?: string; passwordHash?: string }, actorUid?: string): UserProfile {
     const user = this.users.get(uid);
     if (!user) throw new Error('Không tìm thấy người dùng');
 
@@ -344,13 +342,20 @@ class DataStore {
     if (updates.phone !== undefined) user.phone = updates.phone;
     if (updates.avatarUrl) user.avatarUrl = updates.avatarUrl;
 
-    user.updatedAt = new Date().toISOString();
-    this.users.set(uid, user);
-
     if (updates.password) {
-      this.userPasswords.set(user.email.toLowerCase(), updates.password);
+      const cleanPwd = String(updates.password).trim();
+      user.currentPassword = cleanPwd;
+      if (updates.passwordHash) {
+        user.passwordHash = updates.passwordHash;
+      }
+      this.userPasswords.set(user.email.toLowerCase(), cleanPwd);
+    } else if (updates.currentPassword) {
+      user.currentPassword = updates.currentPassword;
+      this.userPasswords.set(user.email.toLowerCase(), updates.currentPassword);
     }
 
+    user.updatedAt = new Date().toISOString();
+    this.users.set(uid, user);
     this.saveUsers();
 
     this.logAction({

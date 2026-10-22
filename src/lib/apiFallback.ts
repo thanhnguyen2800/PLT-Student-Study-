@@ -210,10 +210,13 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
         const user = await getFirebaseUserByEmail(email);
         const suppliedPassword = String(password || '').trim();
         const passwordHash = await hashPassword(suppliedPassword);
-        const legacyPasswords = ['Admin@123', 'Student@123', 'Teacher@123', 'admin123', 'teacher123', 'student123', '123456', 'password'];
+        const roleDefault = user && (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') ? 'Admin@123' : user?.role === 'TEACHER' ? 'Teacher@123' : 'Student@123';
+        const activePassword = user?.currentPassword || (user ? dataStore.getUserPassword(user.email) : null) || roleDefault;
         const validPassword = user && user.status !== 'DISABLED' && user.status !== 'LOCKED' &&
           ((user.passwordHash && user.passwordHash === passwordHash) ||
-            (!user.passwordHash && legacyPasswords.includes(suppliedPassword)));
+            (user.currentPassword && user.currentPassword === suppliedPassword) ||
+            (suppliedPassword === activePassword) ||
+            (dataStore.getUserPassword(user.email) === suppliedPassword));
 
         if (validPassword && user) {
           user.lastLoginAt = new Date().toISOString();
@@ -526,9 +529,22 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
         }
       }
 
+      let passwordHash: string | undefined = undefined;
+      if (body.password) {
+        const cleanPassword = String(body.password).trim();
+        passwordHash = await hashPassword(cleanPassword);
+        body.passwordHash = passwordHash;
+        body.currentPassword = cleanPassword;
+      }
+
       const updated: UserProfile = dataStore.getUserById(id)
         ? dataStore.updateUser(id, body, body.actorId)
-        : { ...target, ...body, updatedAt: new Date().toISOString() };
+        : { ...target, ...body, ...(passwordHash ? { passwordHash, currentPassword: body.currentPassword } : {}), updatedAt: new Date().toISOString() };
+
+      if (passwordHash) {
+        updated.passwordHash = passwordHash;
+        updated.currentPassword = String(body.password).trim();
+      }
 
       if (isFirebaseConfigured()) {
         await saveFirebaseUser(updated);

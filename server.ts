@@ -85,10 +85,17 @@ app.post('/api/auth/login', (req, res) => {
         user = dataStore.getUserByEmail(email);
       }
       if (!user || user.status === 'DISABLED' || user.status === 'LOCKED') return null;
-      const passwordHash = createHash('sha256').update(String(password).trim()).digest('hex');
-      const validPasswords = ['Admin@123', 'Student@123', 'Teacher@123', 'admin123', 'teacher123', 'student123', '123456', 'password'];
-      const passwordMatches = (user.passwordHash && user.passwordHash === passwordHash) ||
-        validPasswords.includes(String(password).trim());
+      const suppliedPassword = String(password).trim();
+      const passwordHash = createHash('sha256').update(suppliedPassword).digest('hex');
+      const roleDefault = (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') ? 'Admin@123' : user.role === 'TEACHER' ? 'Teacher@123' : 'Student@123';
+      const activePassword = user.currentPassword || dataStore.getUserPassword(user.email) || roleDefault;
+      const activeHash = user.passwordHash || createHash('sha256').update(activePassword).digest('hex');
+
+      const passwordMatches = (suppliedPassword === activePassword) || 
+        (passwordHash === activeHash) || 
+        (user.currentPassword && user.currentPassword === suppliedPassword) ||
+        (user.passwordHash && user.passwordHash === passwordHash);
+
       if (!passwordMatches) return null;
       user.lastLoginAt = new Date().toISOString();
       await saveUserToFirestore(user);
@@ -176,6 +183,9 @@ app.get('/api/admin/users', async (req, res) => {
         if (u.createdAt && u.createdAt.includes('2025')) {
           u.createdAt = '2026-10-01T00:00:00.000Z';
         }
+        if (!u.currentPassword) {
+          u.currentPassword = dataStore.getUserPassword(u.email) || (u.role === 'SUPER_ADMIN' || u.role === 'ADMIN' ? 'Admin@123' : u.role === 'TEACHER' ? 'Teacher@123' : 'Student@123');
+        }
       });
       dataStore.setUsers(firestoreUsers);
     }
@@ -183,6 +193,9 @@ app.get('/api/admin/users', async (req, res) => {
     sourceUsers.forEach(u => {
       if (u.createdAt && u.createdAt.includes('2025')) {
         u.createdAt = '2026-10-01T00:00:00.000Z';
+      }
+      if (!u.currentPassword) {
+        u.currentPassword = dataStore.getUserPassword(u.email) || (u.role === 'SUPER_ADMIN' || u.role === 'ADMIN' ? 'Admin@123' : u.role === 'TEACHER' ? 'Teacher@123' : 'Student@123');
       }
     });
     const queryText = String(search || '').toLowerCase();
@@ -208,11 +221,26 @@ app.get('/api/admin/users', async (req, res) => {
       return (a.displayName || a.email || '').localeCompare(b.displayName || b.email || '');
     });
 
+    const authorization = String(req.headers.authorization || '');
+    const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+    const actorUid = token.match(/^token_([^_]+)(?:_\d+)?$/)?.[1];
+    const actor = actorUid ? (dataStore.getUserById(actorUid) || firestoreUsers.find(u => u.uid === actorUid)) : null;
+    const isActorSuperAdmin = actor?.role === 'SUPER_ADMIN';
+
+    const safeUsers = filteredUsers.map(u => {
+      if (u.role === 'SUPER_ADMIN' && !isActorSuperAdmin) {
+        const copy = { ...u };
+        delete (copy as any).currentPassword;
+        return copy;
+      }
+      return u;
+    });
+
     res.json({
       success: true,
-      data: filteredUsers,
-      users: filteredUsers,
-      total: filteredUsers.length,
+      data: safeUsers,
+      users: safeUsers,
+      total: safeUsers.length,
       page: 1,
       totalPages: 1,
     });
@@ -441,12 +469,20 @@ app.put('/api/admin/users/:uid', async (req, res) => {
       if (updates.password.length < 6 || updates.password.length > 32) {
         return res.status(400).json({ success: false, error: { message: 'Mật khẩu phải có độ dài từ 6 đến 32 ký tự' } });
       }
+      const cleanPassword = String(updates.password).trim();
+      const passwordHash = createHash('sha256').update(cleanPassword).digest('hex');
+      updates.passwordHash = passwordHash;
+      updates.currentPassword = cleanPassword;
     }
 
     if (!localTarget) {
-      dataStore.addUser(target, updates.password || '123456');
+      dataStore.addUser(target, updates.password || updates.currentPassword || '123456');
     }
     const updated = dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid);
+    if (updates.password) {
+      updated.passwordHash = updates.passwordHash;
+      updated.currentPassword = updates.currentPassword;
+    }
     if (isFirestoreReady()) {
       await saveUserToFirestore(updated);
     }

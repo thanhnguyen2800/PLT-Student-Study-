@@ -14,6 +14,7 @@ export const INITIAL_USERS: (UserProfile & { passwordHash?: string })[] = [
     updatedAt: new Date().toISOString(),
     lastLoginAt: new Date().toISOString(),
     createdBy: 'SYSTEM_BOOTSTRAP',
+    currentPassword: 'Admin@123',
   },
   {
     uid: 'user-admin-02',
@@ -28,6 +29,7 @@ export const INITIAL_USERS: (UserProfile & { passwordHash?: string })[] = [
     updatedAt: new Date().toISOString(),
     lastLoginAt: new Date().toISOString(),
     createdBy: 'user-super-admin-01',
+    currentPassword: 'Admin@123',
   },
   {
     uid: 'user-teacher-01',
@@ -42,6 +44,7 @@ export const INITIAL_USERS: (UserProfile & { passwordHash?: string })[] = [
     updatedAt: new Date().toISOString(),
     lastLoginAt: new Date().toISOString(),
     createdBy: 'user-admin-02',
+    currentPassword: 'Teacher@123',
   },
   {
     uid: 'user-player-01',
@@ -56,6 +59,7 @@ export const INITIAL_USERS: (UserProfile & { passwordHash?: string })[] = [
     updatedAt: new Date().toISOString(),
     lastLoginAt: new Date().toISOString(),
     createdBy: 'user-admin-02',
+    currentPassword: 'Student@123',
   },
   {
     uid: 'user-player-02',
@@ -70,6 +74,7 @@ export const INITIAL_USERS: (UserProfile & { passwordHash?: string })[] = [
     updatedAt: new Date().toISOString(),
     lastLoginAt: new Date().toISOString(),
     createdBy: 'user-admin-02',
+    currentPassword: 'Student@123',
   },
 ];
 
