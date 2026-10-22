@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   AlertTriangle, 
@@ -23,6 +23,13 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
 }) => {
   const [tab, setTab] = useState<'DISCLAIMER' | 'TERMS' | 'PRIVACY'>(defaultTab);
 
+  // Synchronize active tab whenever modal opens or defaultTab prop changes
+  useEffect(() => {
+    if (isOpen) {
+      setTab(defaultTab);
+    }
+  }, [defaultTab, isOpen]);
+
   if (!isOpen) return null;
 
   return (
@@ -32,8 +39,16 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
         {/* Header */}
         <div className="px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shadow-xs shrink-0">
-              <AlertTriangle className="w-5 h-5" />
+            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-xs shrink-0 ${
+              tab === 'DISCLAIMER'
+                ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
+                : tab === 'TERMS'
+                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
+                : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
+            }`}>
+              {tab === 'DISCLAIMER' && <AlertTriangle className="w-5 h-5" />}
+              {tab === 'TERMS' && <FileText className="w-5 h-5" />}
+              {tab === 'PRIVACY' && <ShieldCheck className="w-5 h-5" />}
             </div>
             <div>
               <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
@@ -42,7 +57,9 @@ export const DisclaimerModal: React.FC<DisclaimerModalProps> = ({
                 {tab === 'PRIVACY' && 'Chính sách bảo mật thông tin'}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Quy định & cam kết chất lượng của nền tảng giáo dục STUDENT STUDY
+                {tab === 'DISCLAIMER' && 'Quy định & cam kết miễn trừ trách nhiệm của nền tảng giáo dục STUDENT STUDY'}
+                {tab === 'TERMS' && 'Quy định pháp lý và trách nhiệm của người dùng khi tham gia STUDENT STUDY'}
+                {tab === 'PRIVACY' && 'Cam kết bảo vệ dữ liệu cá nhân và an toàn thông tin người học của PLT SOLUTIONS'}
               </p>
             </div>
           </div>
