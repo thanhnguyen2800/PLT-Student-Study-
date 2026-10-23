@@ -87,16 +87,22 @@ app.post('/api/auth/login', (req, res) => {
       if (!user || user.status === 'DISABLED' || user.status === 'LOCKED') return null;
       const suppliedPassword = String(password).trim();
       const passwordHash = createHash('sha256').update(suppliedPassword).digest('hex');
+
+      // The SINGLE active password for this account
       const roleDefault = (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') ? 'Admin@123' : user.role === 'TEACHER' ? 'Teacher@123' : 'Student@123';
-      const activePassword = user.currentPassword || dataStore.getUserPassword(user.email) || roleDefault;
-      const activeHash = user.passwordHash || createHash('sha256').update(activePassword).digest('hex');
+      const expectedPassword = user.currentPassword || dataStore.getUserPassword(user.email) || roleDefault;
+      const expectedHash = createHash('sha256').update(expectedPassword).digest('hex');
 
-      const passwordMatches = (suppliedPassword === activePassword) || 
-        (passwordHash === activeHash) || 
-        (user.currentPassword && user.currentPassword === suppliedPassword) ||
-        (user.passwordHash && user.passwordHash === passwordHash);
+      // Strict match: ONLY the current active password (or its active SHA-256 hash) is accepted!
+      const isValid = (suppliedPassword === expectedPassword) || (passwordHash === expectedHash);
+      if (!isValid) {
+        return null; // Reject! Old password or wrong password CANNOT log in
+      }
 
-      if (!passwordMatches) return null;
+      // Sync active credentials and last login timestamp
+      user.currentPassword = expectedPassword;
+      user.passwordHash = expectedHash;
+      dataStore.setUserPassword(user.email, expectedPassword);
       user.lastLoginAt = new Date().toISOString();
       await saveUserToFirestore(user);
       return { user };
@@ -108,10 +114,12 @@ app.post('/api/auth/login', (req, res) => {
         try {
           authResult = await authenticateCloudUser();
         } catch (cloudErr) {
-          console.warn('[Auth] Cloud authentication fallback to local:', cloudErr);
+          console.warn('[Auth] Cloud authentication error, fallback to local:', cloudErr);
         }
       }
-      if (!authResult) {
+      
+      // Only check local dataStore if Firestore is NOT configured
+      if (!authResult && !isFirestoreReady()) {
         const localAuth = dataStore.authenticate(email, password);
         if (localAuth) {
           authResult = { user: localAuth.user };
@@ -367,7 +375,13 @@ app.put('/api/users/profile', async (req, res) => {
     if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
     if (department !== undefined) updates.department = department;
     if (phone !== undefined) updates.phone = phone;
-    if (newPassword) updates.password = newPassword;
+    if (newPassword) {
+      const cleanPassword = String(newPassword).trim();
+      const hash = createHash('sha256').update(cleanPassword).digest('hex');
+      updates.password = cleanPassword;
+      updates.currentPassword = cleanPassword;
+      updates.passwordHash = hash;
+    }
 
     let updated: UserProfile;
     if (localUser) {
@@ -375,6 +389,12 @@ app.put('/api/users/profile', async (req, res) => {
     } else {
       updated = { ...target, ...updates, updatedAt: new Date().toISOString() };
       dataStore.addUser(updated, updates.password || '123456');
+    }
+
+    if (updates.password) {
+      updated.currentPassword = updates.currentPassword;
+      updated.passwordHash = updates.passwordHash;
+      dataStore.setUserPassword(updated.email, updates.currentPassword);
     }
 
     // Sync to Cloud Firestore
@@ -393,7 +413,7 @@ app.put('/api/users/profile', async (req, res) => {
 });
 
 app.patch('/api/users/profile', async (req, res) => {
-  // Delegate to put handler
+  // Delegate to put handler logic
   const { uid, displayName, email, avatarUrl, department, phone, currentPassword, newPassword } = req.body;
   if (!uid) return res.status(400).json({ success: false, error: { message: 'Thiếu định danh tài khoản' } });
   try {
@@ -408,7 +428,13 @@ app.patch('/api/users/profile', async (req, res) => {
     if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
     if (department !== undefined) updates.department = department;
     if (phone !== undefined) updates.phone = phone;
-    if (newPassword) updates.password = newPassword;
+    if (newPassword) {
+      const cleanPassword = String(newPassword).trim();
+      const hash = createHash('sha256').update(cleanPassword).digest('hex');
+      updates.password = cleanPassword;
+      updates.currentPassword = cleanPassword;
+      updates.passwordHash = hash;
+    }
 
     let updated: UserProfile;
     if (localUser) {
@@ -416,6 +442,12 @@ app.patch('/api/users/profile', async (req, res) => {
     } else {
       updated = { ...target, ...updates, updatedAt: new Date().toISOString() };
       dataStore.addUser(updated, updates.password || '123456');
+    }
+
+    if (updates.password) {
+      updated.currentPassword = updates.currentPassword;
+      updated.passwordHash = updates.passwordHash;
+      dataStore.setUserPassword(updated.email, updates.currentPassword);
     }
 
     if (isFirestoreReady()) {
@@ -508,10 +540,22 @@ app.patch('/api/admin/users/:uid', async (req, res) => {
       return res.status(403).json({ success: false, error: { message: 'Chỉ Super Admin mới có quyền chỉnh sửa tài khoản Super Admin' } });
     }
 
+    if (updates.password) {
+      const cleanPassword = String(updates.password).trim();
+      const passwordHash = createHash('sha256').update(cleanPassword).digest('hex');
+      updates.passwordHash = passwordHash;
+      updates.currentPassword = cleanPassword;
+    }
+
     if (!localTarget) {
       dataStore.addUser(target, updates.password || '123456');
     }
     const updated = dataStore.updateUser(uid, updates, updates.actorId || updates.actorUid);
+    if (updates.password) {
+      updated.passwordHash = updates.passwordHash;
+      updated.currentPassword = updates.currentPassword;
+      dataStore.setUserPassword(updated.email, updates.currentPassword);
+    }
     if (isFirestoreReady()) {
       await saveUserToFirestore(updated);
     }

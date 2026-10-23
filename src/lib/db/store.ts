@@ -233,6 +233,16 @@ class DataStore {
     return this.userPasswords.get(email.toLowerCase()) || null;
   }
 
+  public setUserPassword(email: string, password: string): void {
+    const cleanPwd = String(password).trim();
+    this.userPasswords.set(email.toLowerCase().trim(), cleanPwd);
+    const user = this.getUserByEmail(email);
+    if (user) {
+      user.currentPassword = cleanPwd;
+      this.saveUsers();
+    }
+  }
+
   public authenticate(email: string, passwordAttempt: string): { user: UserProfile } | null {
     const user = this.getUserByEmail(email);
     if (!user) return null;
@@ -245,7 +255,7 @@ class DataStore {
     const storedPwd = user.currentPassword || this.userPasswords.get(user.email.toLowerCase()) || roleDefault;
     const pwd = (passwordAttempt || '').trim();
 
-    if (pwd !== storedPwd && pwd.toLowerCase() !== storedPwd.toLowerCase()) {
+    if (pwd !== storedPwd) {
       return null;
     }
 

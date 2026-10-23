@@ -208,24 +208,31 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
 
       if (isFirebaseConfigured()) {
         const user = await getFirebaseUserByEmail(email);
+        if (!user || user.status === 'DISABLED' || user.status === 'LOCKED') {
+          return makeJsonResponse({ success: false, error: { message: 'Email hoặc mật khẩu không chính xác' } }, 401);
+        }
+
         const suppliedPassword = String(password || '').trim();
         const passwordHash = await hashPassword(suppliedPassword);
-        const roleDefault = user && (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') ? 'Admin@123' : user?.role === 'TEACHER' ? 'Teacher@123' : 'Student@123';
-        const activePassword = user?.currentPassword || (user ? dataStore.getUserPassword(user.email) : null) || roleDefault;
-        const validPassword = user && user.status !== 'DISABLED' && user.status !== 'LOCKED' &&
-          ((user.passwordHash && user.passwordHash === passwordHash) ||
-            (user.currentPassword && user.currentPassword === suppliedPassword) ||
-            (suppliedPassword === activePassword) ||
-            (dataStore.getUserPassword(user.email) === suppliedPassword));
+        const roleDefault = (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') ? 'Admin@123' : user.role === 'TEACHER' ? 'Teacher@123' : 'Student@123';
+        const expectedPassword = user.currentPassword || dataStore.getUserPassword(user.email) || roleDefault;
+        const expectedHash = await hashPassword(expectedPassword);
 
-        if (validPassword && user) {
-          user.lastLoginAt = new Date().toISOString();
-          await saveFirebaseUser(user);
-          return makeJsonResponse({
-            success: true,
-            data: { user, token: 'token_' + user.uid + '_' + Date.now() },
-          });
+        // Strict match: ONLY the current active password (or its active hash) is valid!
+        const isValid = (suppliedPassword === expectedPassword) || (passwordHash === expectedHash);
+        if (!isValid) {
+          return makeJsonResponse({ success: false, error: { message: 'Email hoặc mật khẩu không chính xác' } }, 401);
         }
+
+        user.currentPassword = expectedPassword;
+        user.passwordHash = expectedHash;
+        dataStore.setUserPassword(user.email, expectedPassword);
+        user.lastLoginAt = new Date().toISOString();
+        await saveFirebaseUser(user);
+        return makeJsonResponse({
+          success: true,
+          data: { user, token: 'token_' + user.uid + '_' + Date.now() },
+        });
       }
 
       return makeJsonResponse({
@@ -486,11 +493,23 @@ export async function handleClientApi(urlStr: string, init?: RequestInit): Promi
       if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
       if (department !== undefined) updates.department = department;
       if (phone !== undefined) updates.phone = phone;
-      if (newPassword) updates.password = newPassword;
+      if (newPassword) {
+        const cleanPassword = String(newPassword).trim();
+        const hash = await hashPassword(cleanPassword);
+        updates.password = cleanPassword;
+        updates.currentPassword = cleanPassword;
+        updates.passwordHash = hash;
+      }
 
       const updated: UserProfile = dataStore.getUserById(uid)
         ? dataStore.updateUser(uid, updates, uid)
         : { ...target, ...updates, updatedAt: new Date().toISOString() };
+
+      if (updates.password) {
+        updated.currentPassword = updates.currentPassword;
+        updated.passwordHash = updates.passwordHash;
+        dataStore.setUserPassword(updated.email, updates.currentPassword);
+      }
 
       if (isFirebaseConfigured()) {
         await saveFirebaseUser(updated);
