@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# AI Studio internal artifacts & uploaded conversation images
+.aistudio/
+public/assets/
+assets/aistudio/
+
