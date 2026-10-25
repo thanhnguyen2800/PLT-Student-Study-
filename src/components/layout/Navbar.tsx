@@ -27,20 +27,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openA
   const [showProfileModal, setShowProfileModal] = useState(false);
 
   const handleNavClick = (tabId: string) => {
-    if (tabId === 'tinhnang') {
-      if (currentTab !== 'intro') {
-        setCurrentTab('intro');
-      }
-      setTimeout(() => {
-        const el = document.getElementById('tinh-nang');
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 100);
-      setMobileMenuOpen(false);
-      return;
-    }
-
     if (tabId === 'ai') {
       openAIChat();
       setMobileMenuOpen(false);
@@ -98,7 +84,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openA
           {/* 3. Tính năng */}
           <button
             onClick={() => handleNavClick('tinhnang')}
-            className={navBtnClass(false)}
+            className={navBtnClass(currentTab === 'tinhnang')}
           >
             Tính năng
           </button>
@@ -250,42 +236,67 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, setCurrentTab, openA
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pt-3 pb-6 space-y-2 animate-in slide-in-from-top-2">
+          {/* Mobile Drawer Navigation Links */}
           <button
             onClick={() => handleNavClick('intro')}
-            className="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+              currentTab === 'intro'
+                ? 'bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 font-bold'
+                : 'text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
           >
             Trang chủ
           </button>
           {currentUser && (
             <button
               onClick={() => handleNavClick('dashboard')}
-              className="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              className={`w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                currentTab === 'dashboard'
+                  ? 'bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 font-bold'
+                  : 'text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
             >
               Bàn học
             </button>
           )}
           <button
             onClick={() => handleNavClick('tinhnang')}
-            className="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+              currentTab === 'tinhnang'
+                ? 'bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 font-bold'
+                : 'text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
           >
             Tính năng
           </button>
           <button
             onClick={() => handleNavClick('quizzes')}
-            className="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+              currentTab === 'quizzes'
+                ? 'bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 font-bold'
+                : 'text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
           >
             Kho Quiz
           </button>
           <button
             onClick={() => handleNavClick('multiplayer')}
-            className="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between"
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors flex items-center justify-between ${
+              currentTab === 'multiplayer'
+                ? 'bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 font-bold'
+                : 'text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
           >
             <span>Đấu trường Live</span>
             <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-amber-950 text-[10px] font-black">HOT</span>
           </button>
           <button
             onClick={() => handleNavClick('minigames')}
-            className="w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+              currentTab === 'minigames'
+                ? 'bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 font-bold'
+                : 'text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
           >
             Mini Games
           </button>
